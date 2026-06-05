@@ -1,0 +1,3 @@
+# config
+
+App-wide constants.

@@ -1,0 +1,19 @@
+// Prisma schema — Chunk 0.1 (foundation).
+// In Prisma 7 the connection URL lives in `prisma.config.ts`, not here.
+// Docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// TEMPORARY — exists only to validate the Neon + Prisma Migrate pipeline
+// end-to-end. Removed in chunk 0.3 when real models arrive.
+model Health {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+}
