@@ -13,6 +13,15 @@ import type {
   VaultResult,
 } from "./types";
 
+/** Turn a thrown server error into a user-facing message (no stack leaks). */
+function vaultErrorMessage(e: unknown): string {
+  const msg = e instanceof Error ? e.message : "";
+  if (msg.includes("ENCRYPTION_KEY")) {
+    return "Clé de chiffrement serveur absente (ENCRYPTION_KEY). L'administrateur doit la définir dans les variables d'environnement.";
+  }
+  return msg || "Échec de l'enregistrement";
+}
+
 async function audit(
   orgId: string,
   actorUserId: string,
@@ -61,37 +70,41 @@ export async function saveShopify(input: {
 }): Promise<VaultResult> {
   const { orgId, userId } = await requireOrgRole("owner");
 
-  const creds: ShopifyCreds = {
-    shopDomain: normalizeShopDomain(input.shopDomain),
-    adminAccessToken: input.adminAccessToken.trim(),
-    apiVersion: input.apiVersion?.trim() || SHOPIFY_API_VERSION,
-  };
+  try {
+    const creds: ShopifyCreds = {
+      shopDomain: normalizeShopDomain(input.shopDomain),
+      adminAccessToken: input.adminAccessToken.trim(),
+      apiVersion: input.apiVersion?.trim() || SHOPIFY_API_VERSION,
+    };
 
-  const test = await testShopify(creds);
-  const status = test.ok ? "connected" : "unverified";
+    const test = await testShopify(creds);
+    const status = test.ok ? "connected" : "unverified";
 
-  await getOrgDb(orgId!).integration.upsert({
-    where: {
-      orgId_provider: { orgId: orgId!, provider: IntegrationProvider.SHOPIFY },
-    },
-    create: {
-      orgId: orgId!,
-      provider: IntegrationProvider.SHOPIFY,
-      credentialsEnc: encrypt(JSON.stringify(creds)),
-      status,
-      connectedAt: new Date(),
-      meta: { shopDomain: creds.shopDomain, shopName: test.shopName ?? null },
-    },
-    update: {
-      credentialsEnc: encrypt(JSON.stringify(creds)),
-      status,
-      connectedAt: new Date(),
-      meta: { shopDomain: creds.shopDomain, shopName: test.shopName ?? null },
-    },
-  });
+    await getOrgDb(orgId!).integration.upsert({
+      where: {
+        orgId_provider: { orgId: orgId!, provider: IntegrationProvider.SHOPIFY },
+      },
+      create: {
+        orgId: orgId!,
+        provider: IntegrationProvider.SHOPIFY,
+        credentialsEnc: encrypt(JSON.stringify(creds)),
+        status,
+        connectedAt: new Date(),
+        meta: { shopDomain: creds.shopDomain, shopName: test.shopName ?? null },
+      },
+      update: {
+        credentialsEnc: encrypt(JSON.stringify(creds)),
+        status,
+        connectedAt: new Date(),
+        meta: { shopDomain: creds.shopDomain, shopName: test.shopName ?? null },
+      },
+    });
 
-  await audit(orgId!, userId!, "integration.connected", IntegrationProvider.SHOPIFY);
-  return { ok: test.ok, status, message: test.message };
+    await audit(orgId!, userId!, "integration.connected", IntegrationProvider.SHOPIFY);
+    return { ok: test.ok, status, message: test.message };
+  } catch (e) {
+    return { ok: false, status: "unverified", message: vaultErrorMessage(e) };
+  }
 }
 
 export async function saveOzon(input: {
@@ -100,36 +113,44 @@ export async function saveOzon(input: {
 }): Promise<VaultResult> {
   const { orgId, userId } = await requireOrgRole("owner");
 
-  const creds: OzonCreds = {
-    customerId: input.customerId.trim(),
-    apiKey: input.apiKey.trim(),
-  };
+  try {
+    const creds: OzonCreds = {
+      customerId: input.customerId.trim(),
+      apiKey: input.apiKey.trim(),
+    };
 
-  const test = await testOzon(creds);
-  const status = test.ok ? (test.unverified ? "unverified" : "connected") : "unverified";
+    const test = await testOzon(creds);
+    const status = test.ok
+      ? test.unverified
+        ? "unverified"
+        : "connected"
+      : "unverified";
 
-  await getOrgDb(orgId!).integration.upsert({
-    where: {
-      orgId_provider: { orgId: orgId!, provider: IntegrationProvider.OZON },
-    },
-    create: {
-      orgId: orgId!,
-      provider: IntegrationProvider.OZON,
-      credentialsEnc: encrypt(JSON.stringify(creds)),
-      status,
-      connectedAt: new Date(),
-      meta: { customerId: creds.customerId },
-    },
-    update: {
-      credentialsEnc: encrypt(JSON.stringify(creds)),
-      status,
-      connectedAt: new Date(),
-      meta: { customerId: creds.customerId },
-    },
-  });
+    await getOrgDb(orgId!).integration.upsert({
+      where: {
+        orgId_provider: { orgId: orgId!, provider: IntegrationProvider.OZON },
+      },
+      create: {
+        orgId: orgId!,
+        provider: IntegrationProvider.OZON,
+        credentialsEnc: encrypt(JSON.stringify(creds)),
+        status,
+        connectedAt: new Date(),
+        meta: { customerId: creds.customerId },
+      },
+      update: {
+        credentialsEnc: encrypt(JSON.stringify(creds)),
+        status,
+        connectedAt: new Date(),
+        meta: { customerId: creds.customerId },
+      },
+    });
 
-  await audit(orgId!, userId!, "integration.connected", IntegrationProvider.OZON);
-  return { ok: test.ok, status, message: test.message };
+    await audit(orgId!, userId!, "integration.connected", IntegrationProvider.OZON);
+    return { ok: test.ok, status, message: test.message };
+  } catch (e) {
+    return { ok: false, status: "unverified", message: vaultErrorMessage(e) };
+  }
 }
 
 export async function testIntegration(

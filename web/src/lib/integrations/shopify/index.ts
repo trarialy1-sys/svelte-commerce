@@ -3,12 +3,29 @@ import type { ShopifyCreds } from "../types";
 // Current stable Shopify Admin API version (configurable; stored in creds).
 export const SHOPIFY_API_VERSION = "2026-01";
 
+/**
+ * Resolve any pasted form of a store reference to its `*.myshopify.com` domain,
+ * which is what the Admin API requires. Handles:
+ *   - https://admin.shopify.com/store/<handle>/...  → <handle>.myshopify.com
+ *   - <handle>                                      → <handle>.myshopify.com
+ *   - https://<handle>.myshopify.com/               → <handle>.myshopify.com
+ *   - a custom storefront domain                    → passed through as-is
+ */
 export function normalizeShopDomain(input: string): string {
-  return input
-    .trim()
-    .replace(/^https?:\/\//, "")
-    .replace(/\/+$/, "")
-    .toLowerCase();
+  let s = input.trim().toLowerCase().replace(/^https?:\/\//, "");
+
+  // Shopify admin URL: admin.shopify.com/store/<handle>
+  const admin = s.match(/^admin\.shopify\.com\/store\/([^/?#]+)/);
+  if (admin) return `${admin[1]}.myshopify.com`;
+
+  // Drop any path / query / trailing slash.
+  s = s.replace(/[/?#].*$/, "");
+  if (!s) return s;
+
+  // Bare store handle (no dot) → add the canonical suffix.
+  if (!s.includes(".")) return `${s}.myshopify.com`;
+
+  return s;
 }
 
 export interface ShopifyTestResult {
