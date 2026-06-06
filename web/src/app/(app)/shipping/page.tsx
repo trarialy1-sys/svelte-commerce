@@ -53,9 +53,11 @@ export default async function ShippingPage() {
     let suggestedId: number | null = o.cityId ?? null;
     let method: string = o.cityId != null ? "saved" : "none";
     if (suggestedId == null) {
-      const r = resolver.resolve(ville, address);
-      suggestedId = r.cityId ?? resolver.suggest(ville, address);
-      method = suggestedId == null ? "none" : r.method;
+      // closest() = confident resolve, else nearest by edit distance
+      // (Casa is ranked against the address).
+      const r = resolver.closest(ville, address);
+      suggestedId = r.cityId;
+      method = r.method;
     }
     return {
       id: o.id,

@@ -77,6 +77,8 @@ const METHOD_LABEL: Record<string, string> = {
   exact: "Exacte",
   casa: "Quartier Casa",
   fuzzy: "Approx.",
+  approx: "Proche",
+  guess: "À vérifier",
   none: "À corriger",
 };
 const METHOD_TONE: Record<string, "green" | "blue" | "amber" | "red"> = {
@@ -85,8 +87,12 @@ const METHOD_TONE: Record<string, "green" | "blue" | "amber" | "red"> = {
   exact: "green",
   casa: "blue",
   fuzzy: "amber",
+  approx: "amber",
+  guess: "red",
   none: "red",
 };
+/** High-confidence methods eligible for one-click bulk save. */
+const CONFIDENT = new Set(["alias", "exact", "casa", "fuzzy"]);
 
 function CityPicker({
   cities,
@@ -187,7 +193,10 @@ export function ShippingView({
     return null;
   }
 
-  const detected = rows.filter((r) => !resolvedOf(r) && r.suggestedId != null);
+  // Bulk auto-save only high-confidence detections; approx/guess need review.
+  const detected = rows.filter(
+    (r) => !resolvedOf(r) && r.suggestedId != null && CONFIDENT.has(r.method)
+  );
   const resolvedCount = rows.filter((r) => resolvedOf(r) != null).length;
   const toFixCount = rows.length - resolvedCount;
   const selectableIds = rows.filter((r) => resolvedOf(r)).map((r) => r.id);
@@ -206,6 +215,11 @@ export function ShippingView({
     } finally {
       setBusy(false);
     }
+  }
+
+  async function confirmRow(row: ShippingRow) {
+    if (row.suggestedId == null) return;
+    await pick(row, { id: row.suggestedId, name: row.suggestedName });
   }
 
   async function confirmDetected() {
@@ -598,12 +612,25 @@ export function ShippingView({
                       </div>
                     </div>
                     {canWrite ? (
-                      <CityPicker
-                        cities={cities}
-                        valueName={resolved?.name ?? ""}
-                        disabled={busy}
-                        onPick={(c) => pick(row, c)}
-                      />
+                      <div className="flex items-center gap-2">
+                        {!resolved && row.suggestedId != null ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={busy}
+                            onClick={() => confirmRow(row)}
+                            title={`Confirmer : ${row.suggestedName}`}
+                          >
+                            <Check className="size-4" />
+                          </Button>
+                        ) : null}
+                        <CityPicker
+                          cities={cities}
+                          valueName={resolved?.name ?? row.suggestedName}
+                          disabled={busy}
+                          onPick={(c) => pick(row, c)}
+                        />
+                      </div>
                     ) : null}
                   </div>
                 );

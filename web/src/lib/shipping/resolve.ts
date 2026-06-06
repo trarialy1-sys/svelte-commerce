@@ -36,7 +36,33 @@ export interface CasaDistrict {
   id: number;
   district: string;
 }
-export type ResolveMethod = "alias" | "exact" | "casa" | "fuzzy" | "none";
+export type ResolveMethod =
+  | "alias"
+  | "exact"
+  | "casa"
+  | "fuzzy"
+  | "approx"
+  | "guess"
+  | "none";
+
+/** Levenshtein edit distance (iterative, two-row). */
+export function levenshtein(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  let prev = Array.from({ length: n + 1 }, (_, i) => i);
+  const curr = new Array<number>(n + 1);
+  for (let i = 1; i <= m; i++) {
+    curr[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
+    }
+    prev = curr.slice();
+  }
+  return prev[n];
+}
 
 /** Casa districts, longest-district-first (matches the tool's sort). */
 export function buildCasa(cities: CityRow[]): CasaDistrict[] {
@@ -82,7 +108,18 @@ export interface CityResolver {
     ville: string,
     address?: string
   ): { cityId: number | null; method: ResolveMethod };
-  /** Best-effort id for pre-filling the picker (resolve + Casa on ville+address). */
+  /**
+   * Always-on best-effort suggestion for pre-filling the picker. Tries the
+   * confident `resolve` first; otherwise returns the CLOSEST match by edit
+   * distance. For Casa-family villes it ranks the districts against the address
+   * (since "Casablanca" alone is ambiguous). Method is `approx` (near) or
+   * `guess` (far) so the UI can flag low-confidence picks.
+   */
+  closest(
+    ville: string,
+    address?: string
+  ): { cityId: number | null; method: ResolveMethod };
+  /** Best-effort id only (kept for compatibility). */
   suggest(ville: string, address?: string): number | null;
   cityName(id: number | null | undefined): string;
   search(q: string, limit?: number): CityRow[];
@@ -115,10 +152,75 @@ export function makeResolver(
     return { cityId: null, method: "none" as const };
   }
 
+  /** Rank Casa districts by closeness to the address tokens. */
+  function rankCasaByAddress(
+    address: string
+  ): { id: number; dist: number } | null {
+    const toks = cityKey(address).split(" ").filter((t) => t.length > 2);
+    if (toks.length === 0) return null;
+    let best: { id: number; dist: number } | null = null;
+    for (const c of casa) {
+      const dToks = c.district.split(" ").filter(Boolean);
+      let dist = Infinity;
+      for (const dt of dToks) {
+        for (const at of toks) {
+          if (at.includes(dt) || dt.includes(at)) dist = Math.min(dist, 1);
+          dist = Math.min(dist, levenshtein(dt, at));
+        }
+      }
+      if (best == null || dist < best.dist) best = { id: c.id, dist };
+    }
+    return best;
+  }
+
+  /** Closest catalog city to `ville` by edit distance (+ substring bonus). */
+  function closestCity(
+    ville: string
+  ): { id: number; dist: number } | null {
+    const q = cityKey(ville);
+    if (!q) return null;
+    let best: { id: number; dist: number; len: number } | null = null;
+    for (const c of cities) {
+      const ck = cityKey(c.name);
+      let d = levenshtein(q, ck);
+      if (ck.includes(q) || q.includes(ck)) d = Math.min(d, 1);
+      if (
+        best == null ||
+        d < best.dist ||
+        (d === best.dist && c.name.length < best.len)
+      ) {
+        best = { id: c.id, dist: d, len: c.name.length };
+      }
+    }
+    return best ? { id: best.id, dist: best.dist } : null;
+  }
+
+  function closest(ville: string, address = "") {
+    const conf = resolve(ville, address);
+    if (conf.cityId != null) return conf;
+
+    const k = cityKey(ville);
+    if (/casa/.test(k) || matchCasaDistrict(casa, ville) != null) {
+      const r = rankCasaByAddress(address) ?? rankCasaByAddress(ville);
+      if (r)
+        return {
+          cityId: r.id,
+          method: (r.dist <= 2 ? "approx" : "guess") as ResolveMethod,
+        };
+      return { cityId: null, method: "none" as ResolveMethod };
+    }
+
+    const c = closestCity(ville);
+    if (c)
+      return {
+        cityId: c.id,
+        method: (c.dist <= 2 ? "approx" : "guess") as ResolveMethod,
+      };
+    return { cityId: null, method: "none" as ResolveMethod };
+  }
+
   function suggest(ville: string, address = ""): number | null {
-    const r = resolve(ville, address);
-    if (r.cityId != null) return r.cityId;
-    return matchCasaDistrict(casa, `${ville || ""} ${address || ""}`);
+    return closest(ville, address).cityId;
   }
 
   function cityName(id: number | null | undefined): string {
@@ -138,7 +240,7 @@ export function makeResolver(
     return out;
   }
 
-  return { resolve, suggest, cityName, search, cities };
+  return { resolve, closest, suggest, cityName, search, cities };
 }
 
 /** Load the global catalog + the org's aliases and build a resolver. */
