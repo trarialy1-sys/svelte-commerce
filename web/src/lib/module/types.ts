@@ -74,6 +74,8 @@ export interface ModuleConfig {
   exportColumns?: ExportColumn[];
   /** optional fixed scoping (e.g. a status subset) */
   baseWhere?: Record<string, unknown>;
+  /** optional Prisma `include` for relations (read with dot-path column keys) */
+  include?: Record<string, unknown>;
 }
 
 export interface ListParams {

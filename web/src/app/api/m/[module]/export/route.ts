@@ -10,13 +10,21 @@ import type { ExportColumn, ModuleConfig, Row } from "@/lib/module/types";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function getNested(row: Row, key: string): unknown {
+  if (!key.includes(".")) return row[key];
+  return key.split(".").reduce<unknown>((acc, part) => {
+    if (acc && typeof acc === "object") return (acc as Row)[part];
+    return undefined;
+  }, row);
+}
+
 function valueFor(
   config: ModuleConfig,
   col: ExportColumn,
   row: Row
 ): string | number {
   if (col.map) return col.map(row);
-  const raw = row[col.key];
+  const raw = getNested(row, col.key);
   if (raw == null) return "";
   const column = config.columns.find((c) => c.key === col.key);
   switch (column?.type) {
