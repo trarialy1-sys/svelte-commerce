@@ -21,6 +21,8 @@ export interface Column {
   align?: "left" | "right";
   /** status value -> StatusBadge tone (green/amber/blue/violet/red/neutral) */
   badgeMap?: Record<string, string>;
+  /** status value -> human label (for badge columns) */
+  labelMap?: Record<string, string>;
   /** for type 'custom' (client-rendered) */
   render?: (row: Row) => ReactNode;
 }
