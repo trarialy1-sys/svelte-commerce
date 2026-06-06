@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   cityKey,
   fuzzyCity,
+  levenshtein,
   makeResolver,
   type CityRow,
 } from "@/lib/shipping/resolve";
@@ -62,5 +63,36 @@ describe("fuzzyCity", () => {
   it("requires at least two tokens", () => {
     expect(fuzzyCity(CITIES, "rabatt")).toBeNull(); // single token -> no fuzzy
     expect(fuzzyCity(CITIES, "ben guerir")).toBe(6);
+  });
+});
+
+describe("levenshtein", () => {
+  it("computes edit distance", () => {
+    expect(levenshtein("rabat", "rabatt")).toBe(1);
+    expect(levenshtein("", "abc")).toBe(3);
+    expect(levenshtein("same", "same")).toBe(0);
+  });
+});
+
+describe("closest (always-on suggestion)", () => {
+  const r = makeResolver(CITIES, new Map());
+
+  it("prefers a confident resolve when available", () => {
+    expect(r.closest("rabat")).toEqual({ cityId: 3, method: "exact" });
+  });
+
+  it("suggests the nearest city for a single-token typo (approx)", () => {
+    // 'rabatt' would not fuzzy-match, but closest returns Rabat
+    expect(r.closest("rabatt")).toEqual({ cityId: 3, method: "approx" });
+  });
+
+  it("ranks Casa districts by the address when the ville is just 'Casa'", () => {
+    // address token 'chok' is one edit from district 'chock'
+    const res = r.closest("Casablanca", "Rue 5, Ain Chok");
+    expect(res.cityId).toBe(2); // Casablanca - Ain Chock
+  });
+
+  it("always returns a best-effort id rather than nothing", () => {
+    expect(r.closest("Marakech").cityId).toBe(4); // typo -> Marrakech
   });
 });
