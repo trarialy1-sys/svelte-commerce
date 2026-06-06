@@ -1,0 +1,182 @@
+import "server-only";
+
+import { IntegrationProvider } from "@/generated/prisma/client";
+import { getOrgDb } from "@/lib/db";
+import { requireOrgRole } from "@/lib/auth";
+import { decrypt, encrypt } from "@/lib/crypto";
+import { SHOPIFY_API_VERSION, normalizeShopDomain, testShopify } from "./shopify";
+import { testOzon } from "./ozon";
+import type {
+  AnyCreds,
+  OzonCreds,
+  ShopifyCreds,
+  VaultResult,
+} from "./types";
+
+async function audit(
+  orgId: string,
+  actorUserId: string,
+  action: string,
+  provider: IntegrationProvider
+) {
+  await getOrgDb(orgId).auditLog.create({
+    data: {
+      orgId,
+      actorUserId,
+      action,
+      entity: "Integration",
+      entityId: provider,
+    },
+  });
+}
+
+/**
+ * SERVER-ONLY. Decrypt and return a provider's credentials for the org, or null.
+ * Imported by tool chunks (1.2–1.4). Never exposed as a server action.
+ */
+export async function getCredentials(
+  orgId: string,
+  provider: "SHOPIFY"
+): Promise<ShopifyCreds | null>;
+export async function getCredentials(
+  orgId: string,
+  provider: "OZON"
+): Promise<OzonCreds | null>;
+export async function getCredentials(
+  orgId: string,
+  provider: IntegrationProvider
+): Promise<AnyCreds | null> {
+  const row = await getOrgDb(orgId).integration.findUnique({
+    where: { orgId_provider: { orgId, provider } },
+    select: { credentialsEnc: true },
+  });
+  if (!row?.credentialsEnc) return null;
+  return JSON.parse(decrypt(row.credentialsEnc)) as AnyCreds;
+}
+
+export async function saveShopify(input: {
+  shopDomain: string;
+  adminAccessToken: string;
+  apiVersion?: string;
+}): Promise<VaultResult> {
+  const { orgId, userId } = await requireOrgRole("owner");
+
+  const creds: ShopifyCreds = {
+    shopDomain: normalizeShopDomain(input.shopDomain),
+    adminAccessToken: input.adminAccessToken.trim(),
+    apiVersion: input.apiVersion?.trim() || SHOPIFY_API_VERSION,
+  };
+
+  const test = await testShopify(creds);
+  const status = test.ok ? "connected" : "unverified";
+
+  await getOrgDb(orgId!).integration.upsert({
+    where: {
+      orgId_provider: { orgId: orgId!, provider: IntegrationProvider.SHOPIFY },
+    },
+    create: {
+      orgId: orgId!,
+      provider: IntegrationProvider.SHOPIFY,
+      credentialsEnc: encrypt(JSON.stringify(creds)),
+      status,
+      connectedAt: new Date(),
+      meta: { shopDomain: creds.shopDomain, shopName: test.shopName ?? null },
+    },
+    update: {
+      credentialsEnc: encrypt(JSON.stringify(creds)),
+      status,
+      connectedAt: new Date(),
+      meta: { shopDomain: creds.shopDomain, shopName: test.shopName ?? null },
+    },
+  });
+
+  await audit(orgId!, userId!, "integration.connected", IntegrationProvider.SHOPIFY);
+  return { ok: test.ok, status, message: test.message };
+}
+
+export async function saveOzon(input: {
+  customerId: string;
+  apiKey: string;
+}): Promise<VaultResult> {
+  const { orgId, userId } = await requireOrgRole("owner");
+
+  const creds: OzonCreds = {
+    customerId: input.customerId.trim(),
+    apiKey: input.apiKey.trim(),
+  };
+
+  const test = await testOzon(creds);
+  const status = test.ok ? (test.unverified ? "unverified" : "connected") : "unverified";
+
+  await getOrgDb(orgId!).integration.upsert({
+    where: {
+      orgId_provider: { orgId: orgId!, provider: IntegrationProvider.OZON },
+    },
+    create: {
+      orgId: orgId!,
+      provider: IntegrationProvider.OZON,
+      credentialsEnc: encrypt(JSON.stringify(creds)),
+      status,
+      connectedAt: new Date(),
+      meta: { customerId: creds.customerId },
+    },
+    update: {
+      credentialsEnc: encrypt(JSON.stringify(creds)),
+      status,
+      connectedAt: new Date(),
+      meta: { customerId: creds.customerId },
+    },
+  });
+
+  await audit(orgId!, userId!, "integration.connected", IntegrationProvider.OZON);
+  return { ok: test.ok, status, message: test.message };
+}
+
+export async function testIntegration(
+  provider: IntegrationProvider
+): Promise<VaultResult> {
+  const { orgId } = await requireOrgRole("owner");
+  const row = await getOrgDb(orgId!).integration.findUnique({
+    where: { orgId_provider: { orgId: orgId!, provider } },
+    select: { credentialsEnc: true },
+  });
+  if (!row?.credentialsEnc) {
+    return { ok: false, status: "disconnected", message: "Aucun identifiant enregistré" };
+  }
+  const creds = JSON.parse(decrypt(row.credentialsEnc));
+
+  let ok = false;
+  let status: VaultResult["status"] = "unverified";
+  let message = "";
+  if (provider === IntegrationProvider.SHOPIFY) {
+    const r = await testShopify(creds as ShopifyCreds);
+    ok = r.ok;
+    status = r.ok ? "connected" : "unverified";
+    message = r.message;
+  } else if (provider === IntegrationProvider.OZON) {
+    const r = await testOzon(creds as OzonCreds);
+    ok = r.ok;
+    status = r.ok ? "unverified" : "unverified";
+    message = r.message;
+  } else {
+    message = "Fournisseur non testable";
+  }
+
+  await getOrgDb(orgId!).integration.update({
+    where: { orgId_provider: { orgId: orgId!, provider } },
+    data: { status },
+  });
+  return { ok, status, message };
+}
+
+export async function disconnectIntegration(
+  provider: IntegrationProvider
+): Promise<VaultResult> {
+  const { orgId, userId } = await requireOrgRole("owner");
+  await getOrgDb(orgId!).integration.update({
+    where: { orgId_provider: { orgId: orgId!, provider } },
+    data: { credentialsEnc: null, status: "disconnected", connectedAt: null },
+  });
+  await audit(orgId!, userId!, "integration.disconnected", provider);
+  return { ok: true, status: "disconnected", message: "Déconnecté" };
+}
