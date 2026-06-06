@@ -1,6 +1,7 @@
-// Prisma schema — Chunk 0.1 (foundation).
-// In Prisma 7 the connection URL lives in `prisma.config.ts`, not here.
-// Docs: https://pris.ly/d/prisma-schema
+// Prisma schema — Chunk 0.3 (full data foundation).
+// Prisma 7: connection URL lives in `prisma.config.ts` (CLI uses DIRECT_URL);
+// the runtime client uses the pooled DATABASE_URL via a driver adapter
+// (src/lib/db/db.ts). Clerk ids are the PKs for Organization and User.
 
 generator client {
   provider = "prisma-client"
@@ -11,9 +12,315 @@ datasource db {
   provider = "postgresql"
 }
 
-// TEMPORARY — exists only to validate the Neon + Prisma Migrate pipeline
-// end-to-end. Removed in chunk 0.3 when real models arrive.
-model Health {
+enum Role {
+  OWNER
+  ADMIN
+  OPERATOR
+  VIEWER
+}
+
+enum IntegrationProvider {
+  SHOPIFY
+  OZON
+  ANTHROPIC
+}
+
+enum OrderStatus {
+  NOUVELLE
+  CONFIRMEE
+  ANNULEE
+  REPORTEE
+  PAS_DE_REPONSE
+  INJOIGNABLE
+  NUMERO_ERRONE
+  DOUBLON
+  HORS_ZONE
+}
+
+enum OrderSource {
+  SHOPIFY
+  IMPORT
+  MANUAL
+}
+
+enum ParcelStatus {
+  CREE
+  RAMASSE
+  EN_TRANSIT
+  LIVRE
+  RETOURNE
+  REFUSE
+}
+
+enum CustomerSegment {
+  NOUVEAU
+  RECURRENT
+  VIP
+}
+
+enum DeliveryNoteStatus {
+  DRAFT
+  SAVED
+}
+
+model Organization {
+  id         String   @id // Clerk org id
+  name       String
+  slug       String?  @unique
+  currency   String   @default("MAD")
+  brandColor String   @default("#C1542D")
+  status     String   @default("active")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  memberships         Membership[]
+  integrations        Integration[]
+  products            Product[]
+  variants            Variant[]
+  customers           Customer[]
+  orders              Order[]
+  orderItems          OrderItem[]
+  parcels             Parcel[]
+  deliveryNotes       DeliveryNote[]
+  deliveryNoteParcels DeliveryNoteParcel[]
+  cityAliases         CityAlias[]
+  neighAliases        NeighAlias[]
+  financeSettings     FinanceSettings?
+  auditLogs           AuditLog[]
+}
+
+model User {
+  id          String   @id // Clerk user id
+  email       String   @unique
+  name        String?
+  avatarUrl   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  memberships Membership[]
+}
+
+model Membership {
+  id     String @id @default(cuid())
+  orgId  String
+  userId String
+  role   Role   @default(OPERATOR)
+  org    Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, userId])
+  @@index([orgId])
+}
+
+model Integration {
+  id             String              @id @default(cuid())
+  orgId          String
+  provider       IntegrationProvider
+  status         String              @default("disconnected")
+  credentialsEnc String? // AES-256-GCM blob, set in chunk 1.1
+  meta           Json?
+  connectedAt    DateTime?
+  org            Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, provider])
+  @@index([orgId])
+}
+
+model Product {
   id        String   @id @default(cuid())
+  orgId     String
+  shopifyId String?
+  title     String
+  category  String?
+  status    String   @default("active")
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  variants  Variant[]
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, shopifyId])
+  @@index([orgId])
+}
+
+model Variant {
+  id           String   @id @default(cuid())
+  orgId        String
+  productId    String
+  sku          String
+  price        Decimal  @db.Decimal(10, 2)
+  cost         Decimal? @db.Decimal(10, 2)
+  inventoryQty Int      @default(0)
+  tracked      Boolean  @default(true)
+  product      Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([orgId, sku])
+}
+
+model Customer {
+  id           String          @id @default(cuid())
+  orgId        String
+  name         String
+  phone        String
+  city         String?
+  segment      CustomerSegment @default(NOUVEAU)
+  ordersCount  Int             @default(0)
+  totalSpent   Decimal         @default(0) @db.Decimal(12, 2)
+  firstOrderAt DateTime?
+  lastOrderAt  DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  orders       Order[]
+  org          Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, phone])
+  @@index([orgId])
+}
+
+model Order {
+  id            String      @id @default(cuid())
+  orgId         String
+  code          String
+  customerId    String?
+  cityRaw       String?
+  cityId        Int? // resolved OzonExpress city id
+  address       String?
+  phone         String?
+  totalPrice    Decimal     @default(0) @db.Decimal(10, 2)
+  itemsCount    Int         @default(0)
+  status        OrderStatus @default(NOUVELLE)
+  source        OrderSource @default(MANUAL)
+  confirmedById String? // Clerk user id (no relation, join in app)
+  confirmedAt   DateTime?
+  callbackAt    DateTime?
+  attemptCount  Int         @default(0)
+  statusReason  String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  customer      Customer?   @relation(fields: [customerId], references: [id])
+  items         OrderItem[]
+  parcel        Parcel?
+  org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, code])
+  @@index([orgId, status, createdAt])
+  @@index([orgId, confirmedById])
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orgId     String
+  orderId   String
+  sku       String
+  qty       Int     @default(1)
+  unitPrice Decimal @db.Decimal(10, 2)
+  order     Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([orderId])
+}
+
+model Parcel {
+  id          String       @id @default(cuid())
+  orgId       String
+  orderId     String       @unique
+  tracking    String?
+  ozonCityId  Int?
+  codPrice    Decimal      @default(0) @db.Decimal(10, 2)
+  status      ParcelStatus @default(CREE)
+  shippingFee Decimal?     @db.Decimal(10, 2)
+  returnFee   Decimal?     @db.Decimal(10, 2)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  dnLinks     DeliveryNoteParcel[]
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, status])
+}
+
+model DeliveryNote {
+  id          String             @id @default(cuid())
+  orgId       String
+  ref         String
+  status      DeliveryNoteStatus @default(DRAFT)
+  parcelCount Int                @default(0)
+  pdfUrl      String?
+  labelsUrl   String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  parcels     DeliveryNoteParcel[]
+  org         Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, ref])
+  @@index([orgId])
+}
+
+model DeliveryNoteParcel {
+  id             String @id @default(cuid())
+  orgId          String
+  deliveryNoteId String
+  parcelId       String
+  deliveryNote   DeliveryNote @relation(fields: [deliveryNoteId], references: [id], onDelete: Cascade)
+  parcel         Parcel       @relation(fields: [parcelId], references: [id], onDelete: Cascade)
+  org            Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([deliveryNoteId, parcelId])
+  @@index([orgId])
+}
+
+model CityCatalog {
+  // GLOBAL — shared across all orgs, no orgId, no RLS
+  id        Int      @id // OzonExpress city id
+  name      String
+  region    String?
+  raw       Json?
+  updatedAt DateTime @updatedAt
+}
+
+model CityAlias {
+  id         String @id @default(cuid())
+  orgId      String
+  rawName    String
+  ozonCityId Int
+  org        Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, rawName])
+  @@index([orgId])
+}
+
+model NeighAlias {
+  id         String @id @default(cuid())
+  orgId      String
+  token      String
+  ozonCityId Int
+  org        Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, token])
+  @@index([orgId])
+}
+
+model FinanceSettings {
+  id                  String  @id @default(cuid())
+  orgId               String  @unique
+  currency            String  @default("MAD")
+  defaultShippingCost Decimal @default(0) @db.Decimal(10, 2)
+  returnCost          Decimal @default(0) @db.Decimal(10, 2)
+  org                 Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  orgId       String
+  actorUserId String?
+  action      String
+  entity      String?
+  entityId    String?
+  meta        Json?
+  ip          String?
+  createdAt   DateTime @default(now())
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, createdAt])
 }

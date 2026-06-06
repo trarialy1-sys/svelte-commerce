@@ -5,7 +5,11 @@ import { clerkPublishableKey } from "@/lib/clerk-env";
 // This is a convenience gate only — authoritative checks are re-run server-side
 // in each guarded route via the helpers in `@/lib/auth`.
 
-const isPublicRoute = createRouteMatcher(["/sign-in(.*)", "/sign-up(.*)"]);
+const isPublicRoute = createRouteMatcher([
+  "/sign-in(.*)",
+  "/sign-up(.*)",
+  "/api/webhooks(.*)", // Clerk webhook — verified by svix signature, not auth
+]);
 
 export default clerkMiddleware(
   async (auth, req) => {

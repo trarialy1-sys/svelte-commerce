@@ -1,0 +1,72 @@
+name: web - tenant isolation test
+
+# Chunk 0.3: prove org-scoped data layer + RLS isolation in CI.
+# Runs migrations as an ADMIN role, but runs the app/tests as a NON-superuser
+# role (app_user) — superusers / BYPASSRLS roles ignore RLS, which would give a
+# false pass. Neon's default role is non-superuser without BYPASSRLS, matching.
+
+on:
+  push:
+    branches: [main]
+    paths: ["web/**", ".github/workflows/web-test.yml"]
+  pull_request:
+    paths: ["web/**", ".github/workflows/web-test.yml"]
+
+jobs:
+  isolation:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: appdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # Admin (superuser) — migrations only.
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/appdb
+      # App / tests — non-superuser so RLS is genuinely enforced.
+      DATABASE_URL: postgresql://app_user:app_pw@localhost:5432/appdb
+
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Create non-superuser app role
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -d appdb -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE app_user LOGIN PASSWORD 'app_pw' NOSUPERUSER NOBYPASSRLS;"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply migrations (admin role / DIRECT_URL)
+        run: npx prisma migrate deploy
+
+      - name: Grant table privileges to app_user
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -d appdb -v ON_ERROR_STOP=1 \
+            -c "GRANT USAGE ON SCHEMA public TO app_user;" \
+            -c "GRANT ALL ON ALL TABLES IN SCHEMA public TO app_user;" \
+            -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO app_user;"
+
+      - name: Run isolation test (as non-superuser app_user)
+        run: npm test
