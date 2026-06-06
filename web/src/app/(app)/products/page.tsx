@@ -1,17 +1,34 @@
-import { Package } from "lucide-react";
+import { IntegrationProvider } from "@/generated/prisma/client";
+import { getAuthContext, meetsOrgRole } from "@/lib/auth";
+import { getOrgDb } from "@/lib/db";
+import { ModulePage } from "@/components/module/module-page";
+import { catalogConfig } from "@/modules/catalog/config";
+import { SyncButton } from "./sync-button";
 
-import { PageHeader } from "@/components/page-header";
-import { EmptyState } from "@/components/empty-state";
+export const dynamic = "force-dynamic";
 
-export default function ProductsPage() {
+export default async function ProductsPage() {
+  const { orgId, appRole } = await getAuthContext();
+
+  let lastSyncAt: string | null = null;
+  if (orgId) {
+    const integ = await getOrgDb(orgId).integration.findUnique({
+      where: {
+        orgId_provider: { orgId, provider: IntegrationProvider.SHOPIFY },
+      },
+      select: { meta: true },
+    });
+    const meta = integ?.meta as { lastCatalogSyncAt?: string } | null;
+    lastSyncAt = meta?.lastCatalogSyncAt ?? null;
+  }
+
+  const canSync = meetsOrgRole(appRole, "admin");
+
   return (
-    <>
-      <PageHeader title="Catalogue" subtitle="Produits et variantes." />
-      <EmptyState
-        icon={Package}
-        title="Bientôt — module en construction"
-        message="Le module Catalogue arrive dans un prochain chunk."
-      />
-    </>
+    <ModulePage
+      config={catalogConfig}
+      role={appRole}
+      actions={canSync ? <SyncButton lastSyncAt={lastSyncAt} /> : null}
+    />
   );
 }

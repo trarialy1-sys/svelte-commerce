@@ -11,9 +11,15 @@ interface ModulePageProps {
   config: ModuleConfig;
   role: AppRole | null;
   actions?: React.ReactNode;
+  renderBulkExtra?: (ids: string[], clear: () => void) => React.ReactNode;
 }
 
-export function ModulePage({ config, role, actions }: ModulePageProps) {
+export function ModulePage({
+  config,
+  role,
+  actions,
+  renderBulkExtra,
+}: ModulePageProps) {
   return (
     <>
       <PageHeader
@@ -22,7 +28,7 @@ export function ModulePage({ config, role, actions }: ModulePageProps) {
         actions={actions}
       />
       <React.Suspense fallback={null}>
-        <DataTable config={config} role={role} />
+        <DataTable config={config} role={role} renderBulkExtra={renderBulkExtra} />
       </React.Suspense>
     </>
   );

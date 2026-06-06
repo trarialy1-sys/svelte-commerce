@@ -3,6 +3,8 @@ import "server-only";
 import { getOrgDb } from "@/lib/db";
 import { CustomerSegment } from "@/generated/prisma/client";
 import { customersConfig } from "@/modules/customers/config";
+import { catalogConfig } from "@/modules/catalog/config";
+import { stockConfig } from "@/modules/stock/config";
 import type { ModuleConfig } from "./types";
 
 export type BulkHandler = (
@@ -32,6 +34,8 @@ export const MODULE_REGISTRY: Record<string, RegistryEntry> = {
       },
     },
   },
+  catalog: { config: catalogConfig },
+  stock: { config: stockConfig },
 };
 
 export function getModule(key: string): RegistryEntry | undefined {

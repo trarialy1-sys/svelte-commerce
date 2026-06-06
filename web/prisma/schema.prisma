@@ -132,6 +132,8 @@ model Product {
   title     String
   category  String?
   status    String   @default("active")
+  imageUrl  String?
+  handle    String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   variants  Variant[]
@@ -142,19 +144,28 @@ model Product {
 }
 
 model Variant {
-  id           String   @id @default(cuid())
-  orgId        String
-  productId    String
-  sku          String
-  price        Decimal  @db.Decimal(10, 2)
-  cost         Decimal? @db.Decimal(10, 2)
-  inventoryQty Int      @default(0)
-  tracked      Boolean  @default(true)
-  product      Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
-  org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  id                     String   @id @default(cuid())
+  orgId                  String
+  productId              String
+  sku                    String
+  price                  Decimal  @db.Decimal(10, 2)
+  cost                   Decimal? @db.Decimal(10, 2)
+  inventoryQty           Int      @default(0)
+  tracked                Boolean  @default(true)
+  shopifyVariantId       String?
+  shopifyInventoryItemId String?
+  // Denormalized from Product so the flat module framework can search/sort/filter.
+  title                  String?
+  status                 String   @default("active")
+  // Computed at sync / stock write-back: EN_STOCK | FAIBLE | RUPTURE
+  stockState             String   @default("EN_STOCK")
+  product                Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  org                    Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
+  @@unique([orgId, shopifyVariantId])
   @@index([orgId])
   @@index([orgId, sku])
+  @@index([orgId, stockState])
 }
 
 model Customer {

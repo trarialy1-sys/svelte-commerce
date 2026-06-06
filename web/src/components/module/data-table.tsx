@@ -15,7 +15,7 @@ import {
 import { toast } from "sonner";
 
 import { meetsOrgRole, type AppRole } from "@/lib/auth/roles";
-import { formatDate, formatMoney, formatNumber, formatPhone } from "@/lib/format";
+import { formatDate, formatMoney, formatNumber } from "@/lib/format";
 import type { Column, ListResult, ModuleConfig, Row } from "@/lib/module/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -56,7 +56,7 @@ function Cell({ column, row }: { column: Column; row: Row }) {
   const value = row[column.key];
   switch (column.type) {
     case "mono":
-      return <span className="font-mono text-sm">{formatPhone(String(value ?? ""))}</span>;
+      return <span className="font-mono text-sm">{String(value ?? "—")}</span>;
     case "money":
       return <span className="font-mono tabular-nums">{formatMoney(value as number | string)}</span>;
     case "number":
@@ -66,13 +66,9 @@ function Cell({ column, row }: { column: Column; row: Row }) {
     case "badge": {
       const v = String(value ?? "");
       const tone = column.badgeMap?.[v];
-      return (
-        <StatusBadge
-          status={v}
-          tone={tone as never}
-          label={v.charAt(0) + v.slice(1).toLowerCase()}
-        />
-      );
+      const label =
+        column.labelMap?.[v] ?? v.charAt(0) + v.slice(1).toLowerCase();
+      return <StatusBadge status={v} tone={tone as never} label={label} />;
     }
     case "who":
       return (
@@ -93,9 +89,11 @@ function Cell({ column, row }: { column: Column; row: Row }) {
 interface DataTableProps {
   config: ModuleConfig;
   role: AppRole | null;
+  /** Tool-specific bulk controls rendered in the selection bar (e.g. restock). */
+  renderBulkExtra?: (ids: string[], clear: () => void) => React.ReactNode;
 }
 
-export function DataTable({ config, role }: DataTableProps) {
+export function DataTable({ config, role, renderBulkExtra }: DataTableProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -199,6 +197,7 @@ export function DataTable({ config, role }: DataTableProps) {
   const visibleBulkActions = (config.bulkActions ?? []).filter(
     (a) => !a.minRole || meetsOrgRole(role, a.minRole.toLowerCase() as AppRole)
   );
+  const hasSelection = visibleBulkActions.length > 0 || Boolean(renderBulkExtra);
 
   const exportHref = (format: "csv" | "xlsx") => {
     const sp = new URLSearchParams(paramsString);
@@ -310,10 +309,11 @@ export function DataTable({ config, role }: DataTableProps) {
       </div>
 
       {/* Bulk bar */}
-      {selected.size > 0 && visibleBulkActions.length > 0 ? (
-        <div className="bg-accent/60 flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+      {selected.size > 0 && hasSelection ? (
+        <div className="bg-accent/60 flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 text-sm">
           <span className="font-medium">{selected.size} sélectionné(s)</span>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {renderBulkExtra?.(Array.from(selected), () => setSelected(new Set()))}
             {visibleBulkActions.map((a) => (
               <Button
                 key={a.key}
@@ -340,7 +340,7 @@ export function DataTable({ config, role }: DataTableProps) {
         <Table>
           <TableHeader>
             <TableRow>
-              {visibleBulkActions.length > 0 ? (
+              {hasSelection ? (
                 <TableHead className="w-10">
                   <Checkbox
                     checked={allOnPageSelected}
@@ -385,7 +385,7 @@ export function DataTable({ config, role }: DataTableProps) {
             {isPending ? (
               Array.from({ length: 8 }).map((_, i) => (
                 <TableRow key={i}>
-                  {visibleBulkActions.length > 0 ? (
+                  {hasSelection ? (
                     <TableCell>
                       <Skeleton className="size-4" />
                     </TableCell>
@@ -421,7 +421,7 @@ export function DataTable({ config, role }: DataTableProps) {
                 const id = String(row.id);
                 return (
                   <TableRow key={id} data-state={selected.has(id) ? "selected" : undefined}>
-                    {visibleBulkActions.length > 0 ? (
+                    {hasSelection ? (
                       <TableCell>
                         <Checkbox
                           checked={selected.has(id)}
