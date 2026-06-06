@@ -16,4 +16,5 @@ in Vercel → Settings → Environment Variables for Production + Preview):
 Notes:
 - `NEXT_PUBLIC_*` are frozen into the build; **changing them requires a new
   deployment** (a rebuild), not just an env edit.
-- Values must be raw strings with **no surrounding quotes**.
+- Values must be raw strings with **no surrounding quotes**. The app also
+  sanitizes the Clerk keys at runtime (`src/lib/clerk-env.ts`) as a safeguard.
