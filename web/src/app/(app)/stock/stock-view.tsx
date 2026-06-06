@@ -20,6 +20,7 @@ import {
 import { stockConfig } from "@/modules/stock/config";
 import { ScanDialog } from "./scan-dialog";
 import { setStockAction } from "./actions";
+import { CsvImportButton } from "../products/csv-import-button";
 
 function StockBulkBar({ ids, clear }: { ids: string[]; clear: () => void }) {
   const router = useRouter();
@@ -119,11 +120,19 @@ function StockBulkBar({ ids, clear }: { ids: string[]; clear: () => void }) {
 
 export function StockView({ role }: { role: AppRole | null }) {
   const canWrite = meetsOrgRole(role, "operator");
+  const canImport = meetsOrgRole(role, "admin");
   return (
     <ModulePage
       config={stockConfig}
       role={role}
-      actions={canWrite ? <ScanDialog /> : null}
+      actions={
+        canWrite || canImport ? (
+          <div className="flex items-center gap-2">
+            {canImport ? <CsvImportButton /> : null}
+            {canWrite ? <ScanDialog /> : null}
+          </div>
+        ) : null
+      }
       renderBulkExtra={
         canWrite
           ? (ids, clear) => <StockBulkBar ids={ids} clear={clear} />

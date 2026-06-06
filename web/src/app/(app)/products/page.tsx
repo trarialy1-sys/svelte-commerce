@@ -4,6 +4,7 @@ import { getOrgDb } from "@/lib/db";
 import { ModulePage } from "@/components/module/module-page";
 import { catalogConfig } from "@/modules/catalog/config";
 import { SyncButton } from "./sync-button";
+import { CsvImportButton } from "./csv-import-button";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +29,14 @@ export default async function ProductsPage() {
     <ModulePage
       config={catalogConfig}
       role={appRole}
-      actions={canSync ? <SyncButton lastSyncAt={lastSyncAt} /> : null}
+      actions={
+        canSync ? (
+          <div className="flex items-center gap-2">
+            <CsvImportButton />
+            <SyncButton lastSyncAt={lastSyncAt} />
+          </div>
+        ) : null
+      }
     />
   );
 }
