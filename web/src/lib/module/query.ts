@@ -112,6 +112,7 @@ export async function listModule(
       orderBy: buildOrderBy(params),
       skip: (params.page - 1) * params.pageSize,
       take: params.pageSize,
+      ...(config.include ? { include: config.include } : {}),
     }),
     model.count({ where }),
   ]);
@@ -137,6 +138,7 @@ export async function exportRows(
     where,
     orderBy: buildOrderBy(params),
     take: EXPORT_CAP,
+    ...(config.include ? { include: config.include } : {}),
   });
   return rows as Row[];
 }

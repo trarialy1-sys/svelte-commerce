@@ -53,7 +53,7 @@ export async function POST(
     }
   }
 
-  const result = await handler(orgId, ids);
+  const result = await handler(orgId, ids, { userId });
 
   // Audit log (org-scoped, RLS-protected).
   await getOrgDb(orgId).auditLog.create({

@@ -1,0 +1,492 @@
+"use client";
+
+import * as React from "react";
+import { useRouter } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  ChevronDown,
+  Loader2,
+  PackageX,
+  ShoppingBag,
+  Trash2,
+  Upload,
+} from "lucide-react";
+import { toast } from "sonner";
+
+import { meetsOrgRole, type AppRole } from "@/lib/auth/roles";
+import { formatDate, formatMoney } from "@/lib/format";
+import type { Row } from "@/lib/module/types";
+import { DataTable } from "@/components/module/data-table";
+import { PageHeader } from "@/components/page-header";
+import { StatusBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  ordersConfig,
+  ordersReadyConfig,
+  ordersToConfirmConfig,
+  STATUS_LABELS,
+} from "@/modules/orders/config";
+import {
+  getOrderDetailAction,
+  importExcelAction,
+  importShopifyAction,
+  removeItemAction,
+  removeOosAction,
+  setStatusAction,
+} from "./actions";
+import type { OrderDetail } from "@/lib/orders/remake";
+
+/** Confirmation outcomes available in the per-row dropdown. */
+const OUTCOMES: { status: string; label: string }[] = [
+  { status: "CONFIRMEE", label: STATUS_LABELS.CONFIRMEE },
+  { status: "REPORTEE", label: STATUS_LABELS.REPORTEE },
+  { status: "PAS_DE_REPONSE", label: STATUS_LABELS.PAS_DE_REPONSE },
+  { status: "INJOIGNABLE", label: STATUS_LABELS.INJOIGNABLE },
+  { status: "NUMERO_ERRONE", label: STATUS_LABELS.NUMERO_ERRONE },
+  { status: "DOUBLON", label: STATUS_LABELS.DOUBLON },
+  { status: "HORS_ZONE", label: STATUS_LABELS.HORS_ZONE },
+  { status: "ANNULEE", label: STATUS_LABELS.ANNULEE },
+];
+
+export function OrdersView({ role }: { role: AppRole | null }) {
+  const canWrite = meetsOrgRole(role, "operator");
+  const queryClient = useQueryClient();
+  const [detailId, setDetailId] = React.useState<string | null>(null);
+  const [reportFor, setReportFor] = React.useState<string | null>(null);
+
+  const refreshAll = React.useCallback(() => {
+    for (const key of ["orders", "orders_confirm", "orders_ready"]) {
+      queryClient.invalidateQueries({ queryKey: [key] });
+    }
+  }, [queryClient]);
+
+  const applyStatus = React.useCallback(
+    async (orderId: string, status: string, callbackAt?: string) => {
+      const r = await setStatusAction(orderId, status, { callbackAt });
+      if (r.ok) {
+        toast.success("Statut mis à jour");
+        refreshAll();
+      } else {
+        toast.error(r.message);
+      }
+    },
+    [refreshAll]
+  );
+
+  const renderRowActions = canWrite
+    ? (row: Row) => (
+        <StatusMenu
+          onPick={(status) => {
+            if (status === "REPORTEE") setReportFor(String(row.id));
+            else applyStatus(String(row.id), status);
+          }}
+        />
+      )
+    : undefined;
+
+  const tableProps = {
+    role,
+    onRowClick: (row: Row) => setDetailId(String(row.id)),
+    renderRowActions,
+  };
+
+  return (
+    <>
+      <PageHeader
+        title="Commandes"
+        subtitle="Import, confirmation et préparation des commandes."
+        actions={canWrite ? <ImportBar onDone={refreshAll} /> : null}
+      />
+
+      <Tabs defaultValue="confirm">
+        <TabsList>
+          <TabsTrigger value="confirm">À confirmer</TabsTrigger>
+          <TabsTrigger value="ready">Prêtes</TabsTrigger>
+          <TabsTrigger value="all">Toutes</TabsTrigger>
+        </TabsList>
+        <TabsContent value="confirm">
+          <DataTable config={ordersToConfirmConfig} {...tableProps} />
+        </TabsContent>
+        <TabsContent value="ready">
+          <DataTable config={ordersReadyConfig} {...tableProps} />
+        </TabsContent>
+        <TabsContent value="all">
+          <DataTable config={ordersConfig} {...tableProps} />
+        </TabsContent>
+      </Tabs>
+
+      <OrderDetailSheet
+        orderId={detailId}
+        canWrite={canWrite}
+        onOpenChange={(open) => {
+          if (!open) setDetailId(null);
+        }}
+        onChanged={refreshAll}
+      />
+
+      <ReportDialog
+        key={reportFor ?? "none"}
+        open={reportFor !== null}
+        onOpenChange={(open) => {
+          if (!open) setReportFor(null);
+        }}
+        onConfirm={(date) => {
+          if (reportFor) applyStatus(reportFor, "REPORTEE", date);
+          setReportFor(null);
+        }}
+      />
+    </>
+  );
+}
+
+function StatusMenu({ onPick }: { onPick: (status: string) => void }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="sm">
+          Statut
+          <ChevronDown className="size-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {OUTCOMES.map((o) => (
+          <React.Fragment key={o.status}>
+            {o.status === "ANNULEE" ? <DropdownMenuSeparator /> : null}
+            <DropdownMenuItem
+              variant={o.status === "ANNULEE" ? "destructive" : "default"}
+              onSelect={() => onPick(o.status)}
+            >
+              {o.label}
+            </DropdownMenuItem>
+          </React.Fragment>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function ReportDialog({
+  open,
+  onOpenChange,
+  onConfirm,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: (date: string) => void;
+}) {
+  const [date, setDate] = React.useState("");
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Reporter la commande</DialogTitle>
+          <DialogDescription>
+            Choisissez la date de rappel du client.
+          </DialogDescription>
+        </DialogHeader>
+        <Input
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+        />
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            Annuler
+          </Button>
+          <Button disabled={!date} onClick={() => onConfirm(date)}>
+            Reporter
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ImportBar({ onDone }: { onDone: () => void }) {
+  const router = useRouter();
+  const fileRef = React.useRef<HTMLInputElement>(null);
+  const [pending, setPending] = React.useState<"excel" | "shopify" | null>(null);
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setPending("excel");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await importExcelAction(fd);
+      if (r.ok) {
+        toast.success(
+          `${r.data.created} importée(s), ${r.data.skipped} ignorée(s)`
+        );
+        onDone();
+        router.refresh();
+      } else toast.error(r.message);
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function importShopify() {
+    setPending("shopify");
+    try {
+      const r = await importShopifyAction(50);
+      if (r.ok) {
+        toast.success(
+          `${r.data.created} importée(s), ${r.data.skipped} ignorée(s)`
+        );
+        onDone();
+        router.refresh();
+      } else toast.error(r.message);
+    } finally {
+      setPending(null);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".xlsx,.xls,.csv"
+        className="hidden"
+        onChange={onFile}
+      />
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={pending !== null}
+        onClick={() => fileRef.current?.click()}
+      >
+        {pending === "excel" ? (
+          <Loader2 className="size-4 animate-spin" />
+        ) : (
+          <Upload className="size-4" />
+        )}
+        Importer Excel
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={pending !== null}
+        onClick={importShopify}
+      >
+        {pending === "shopify" ? (
+          <Loader2 className="size-4 animate-spin" />
+        ) : (
+          <ShoppingBag className="size-4" />
+        )}
+        Importer Shopify
+      </Button>
+    </div>
+  );
+}
+
+function OrderDetailSheet({
+  orderId,
+  canWrite,
+  onOpenChange,
+  onChanged,
+}: {
+  orderId: string | null;
+  canWrite: boolean;
+  onOpenChange: (open: boolean) => void;
+  onChanged: () => void;
+}) {
+  const [busy, setBusy] = React.useState(false);
+
+  const { data: detail, isLoading: loading, refetch } = useQuery({
+    queryKey: ["order-detail", orderId],
+    enabled: orderId !== null,
+    queryFn: async (): Promise<OrderDetail | null> => {
+      if (!orderId) return null;
+      const r = await getOrderDetailAction(orderId);
+      return r.ok ? r.data : null;
+    },
+  });
+
+  async function removeItem(itemId: string) {
+    if (!orderId) return;
+    setBusy(true);
+    try {
+      const r = await removeItemAction(orderId, itemId);
+      if (r.ok) {
+        toast.success("Article retiré");
+        await refetch();
+        onChanged();
+      } else toast.error(r.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeOos() {
+    if (!orderId) return;
+    setBusy(true);
+    try {
+      const r = await removeOosAction(orderId);
+      if (r.ok) {
+        toast.success(`${r.data.removed} article(s) en rupture retiré(s)`);
+        await refetch();
+        onChanged();
+      } else toast.error(r.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const hasOos = (detail?.items ?? []).some((i) => i.outOfStock);
+
+  return (
+    <Sheet open={orderId !== null} onOpenChange={onOpenChange}>
+      <SheetContent className="w-full overflow-y-auto sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle>
+            {detail ? detail.code : loading ? "Chargement…" : "Commande"}
+          </SheetTitle>
+          <SheetDescription>
+            {detail ? (
+              <StatusBadge status={detail.status} />
+            ) : (
+              "Détail de la commande"
+            )}
+          </SheetDescription>
+        </SheetHeader>
+
+        {detail ? (
+          <div className="flex flex-col gap-5 px-4 pb-4">
+            <section className="grid grid-cols-2 gap-3 text-sm">
+              <Field label="Client" value={detail.customer?.name ?? "—"} />
+              <Field label="Téléphone" value={detail.phone ?? "—"} />
+              <Field label="Ville" value={detail.cityRaw ?? "—"} />
+              <Field label="Source" value={detail.source} />
+              <Field
+                label="Total"
+                value={formatMoney(detail.totalPrice)}
+              />
+              <Field label="Créée le" value={formatDate(detail.createdAt)} />
+              {detail.address ? (
+                <Field
+                  label="Adresse"
+                  value={detail.address}
+                  className="col-span-2"
+                />
+              ) : null}
+              {detail.note ? (
+                <Field
+                  label="Note"
+                  value={detail.note}
+                  className="col-span-2"
+                />
+              ) : null}
+            </section>
+
+            <section className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold">
+                  Articles ({detail.items.length})
+                </h3>
+                {canWrite && hasOos ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={removeOos}
+                  >
+                    <PackageX className="size-4" />
+                    Retirer ruptures
+                  </Button>
+                ) : null}
+              </div>
+              <ul className="flex flex-col divide-y rounded-lg border">
+                {detail.items.length === 0 ? (
+                  <li className="text-muted-foreground p-3 text-sm">
+                    Aucun article.
+                  </li>
+                ) : (
+                  detail.items.map((item) => (
+                    <li
+                      key={item.id}
+                      className="flex items-center gap-2 p-3 text-sm"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium">
+                          {item.title ?? item.sku}
+                        </p>
+                        <p className="text-muted-foreground font-mono text-xs">
+                          {item.sku} · ×{item.qty} ·{" "}
+                          {formatMoney(item.unitPrice)}
+                        </p>
+                      </div>
+                      {item.outOfStock ? (
+                        <StatusBadge
+                          status="RUPTURE"
+                          tone="red"
+                          label="Rupture"
+                        />
+                      ) : null}
+                      {canWrite ? (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          disabled={busy}
+                          aria-label="Retirer l'article"
+                          onClick={() => removeItem(item.id)}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      ) : null}
+                    </li>
+                  ))
+                )}
+              </ul>
+            </section>
+          </div>
+        ) : null}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function Field({
+  label,
+  value,
+  className,
+}: {
+  label: string;
+  value: string;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      <p className="text-muted-foreground text-xs">{label}</p>
+      <p className="font-medium">{value}</p>
+    </div>
+  );
+}

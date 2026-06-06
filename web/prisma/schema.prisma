@@ -206,6 +206,8 @@ model Order {
   callbackAt    DateTime?
   attemptCount  Int         @default(0)
   statusReason  String?
+  note          String?
+  shopifyOrderId String?
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
   customer      Customer?   @relation(fields: [customerId], references: [id])
@@ -214,6 +216,7 @@ model Order {
   org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   @@unique([orgId, code])
+  @@unique([orgId, shopifyOrderId])
   @@index([orgId, status, createdAt])
   @@index([orgId, confirmedById])
 }

@@ -52,8 +52,17 @@ function initials(name: string): string {
     .toUpperCase();
 }
 
+/** Read a possibly-dotted key (e.g. "customer.name") from a row. */
+function getNested(row: Row, key: string): unknown {
+  if (!key.includes(".")) return row[key];
+  return key.split(".").reduce<unknown>((acc, part) => {
+    if (acc && typeof acc === "object") return (acc as Row)[part];
+    return undefined;
+  }, row);
+}
+
 function Cell({ column, row }: { column: Column; row: Row }) {
-  const value = row[column.key];
+  const value = getNested(row, column.key);
   switch (column.type) {
     case "mono":
       return <span className="font-mono text-sm">{String(value ?? "—")}</span>;
@@ -91,9 +100,19 @@ interface DataTableProps {
   role: AppRole | null;
   /** Tool-specific bulk controls rendered in the selection bar (e.g. restock). */
   renderBulkExtra?: (ids: string[], clear: () => void) => React.ReactNode;
+  /** Open a detail view when a row is clicked. */
+  onRowClick?: (row: Row) => void;
+  /** Per-row controls rendered in a trailing actions column. */
+  renderRowActions?: (row: Row) => React.ReactNode;
 }
 
-export function DataTable({ config, role, renderBulkExtra }: DataTableProps) {
+export function DataTable({
+  config,
+  role,
+  renderBulkExtra,
+  onRowClick,
+  renderRowActions,
+}: DataTableProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -198,6 +217,10 @@ export function DataTable({ config, role, renderBulkExtra }: DataTableProps) {
     (a) => !a.minRole || meetsOrgRole(role, a.minRole.toLowerCase() as AppRole)
   );
   const hasSelection = visibleBulkActions.length > 0 || Boolean(renderBulkExtra);
+  const colSpan =
+    config.columns.length +
+    (hasSelection ? 1 : 0) +
+    (renderRowActions ? 1 : 0);
 
   const exportHref = (format: "csv" | "xlsx") => {
     const sp = new URLSearchParams(paramsString);
@@ -379,6 +402,7 @@ export function DataTable({ config, role, renderBulkExtra }: DataTableProps) {
                   )}
                 </TableHead>
               ))}
+              {renderRowActions ? <TableHead className="w-10" /> : null}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -395,12 +419,17 @@ export function DataTable({ config, role, renderBulkExtra }: DataTableProps) {
                       <Skeleton className="h-4 w-24" />
                     </TableCell>
                   ))}
+                  {renderRowActions ? (
+                    <TableCell>
+                      <Skeleton className="size-4" />
+                    </TableCell>
+                  ) : null}
                 </TableRow>
               ))
             ) : isError ? (
               <TableRow>
                 <TableCell
-                  colSpan={config.columns.length + 1}
+                  colSpan={colSpan}
                   className="text-destructive py-10 text-center"
                 >
                   Échec du chargement des données.
@@ -408,7 +437,7 @@ export function DataTable({ config, role, renderBulkExtra }: DataTableProps) {
               </TableRow>
             ) : rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={config.columns.length + 1} className="p-0">
+                <TableCell colSpan={colSpan} className="p-0">
                   <EmptyState
                     title="Aucun résultat"
                     message="Aucun élément ne correspond à vos critères."
@@ -420,9 +449,14 @@ export function DataTable({ config, role, renderBulkExtra }: DataTableProps) {
               rows.map((row) => {
                 const id = String(row.id);
                 return (
-                  <TableRow key={id} data-state={selected.has(id) ? "selected" : undefined}>
+                  <TableRow
+                    key={id}
+                    data-state={selected.has(id) ? "selected" : undefined}
+                    className={onRowClick ? "cursor-pointer" : undefined}
+                    onClick={onRowClick ? () => onRowClick(row) : undefined}
+                  >
                     {hasSelection ? (
-                      <TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
                         <Checkbox
                           checked={selected.has(id)}
                           onCheckedChange={() => toggleRow(id)}
@@ -438,6 +472,14 @@ export function DataTable({ config, role, renderBulkExtra }: DataTableProps) {
                         <Cell column={col} row={row} />
                       </TableCell>
                     ))}
+                    {renderRowActions ? (
+                      <TableCell
+                        className="text-right"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {renderRowActions(row)}
+                      </TableCell>
+                    ) : null}
                   </TableRow>
                 );
               })
