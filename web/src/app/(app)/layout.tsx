@@ -1,6 +1,7 @@
 import { getActiveOrgName, getAuthContext, requireAuth } from "@/lib/auth";
 import { AppShell } from "@/components/shell/app-shell";
 import { NoOrgScreen } from "@/components/shell/no-org-screen";
+import { Providers } from "@/components/module/providers";
 
 // The whole authed app reads live auth/DB state — never prerender.
 export const dynamic = "force-dynamic";
@@ -21,8 +22,14 @@ export default async function AppGroupLayout({
   const orgName = await getActiveOrgName(orgId);
 
   return (
-    <AppShell orgName={orgName} role={appRole} isPlatformAdmin={isPlatformAdmin}>
-      {children}
-    </AppShell>
+    <Providers>
+      <AppShell
+        orgName={orgName}
+        role={appRole}
+        isPlatformAdmin={isPlatformAdmin}
+      >
+        {children}
+      </AppShell>
+    </Providers>
   );
 }

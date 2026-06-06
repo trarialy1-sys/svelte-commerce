@@ -3,21 +3,15 @@ import { auth, currentUser, clerkClient } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { Role } from "@/generated/prisma/client";
 import { db, withOrg } from "@/lib/db";
+import { ROLE_RANK, meetsOrgRole, type AppRole } from "./roles";
 
 /**
  * Org-level application roles. Same names/signature as Chunk 0.2 — call sites
  * (e.g. `requireOrgRole('admin')`) are unchanged. As of Chunk 0.3 the role is
  * read from the DB `Membership` table (owner/admin/operator/viewer).
  */
-export type AppRole = "owner" | "admin" | "operator" | "viewer";
-
-// OWNER(3) > ADMIN(2) > OPERATOR(1) > VIEWER(0)
-const RANK: Record<AppRole, number> = {
-  viewer: 0,
-  operator: 1,
-  admin: 2,
-  owner: 3,
-};
+export { meetsOrgRole };
+export type { AppRole };
 
 function dbRoleToAppRole(role: Role): AppRole {
   return role.toLowerCase() as AppRole;
@@ -187,7 +181,7 @@ export async function requireOrg(): Promise<AuthContext> {
  */
 export async function requireOrgRole(min: AppRole): Promise<AuthContext> {
   const ctx = await requireOrg();
-  if (!ctx.appRole || RANK[ctx.appRole] < RANK[min]) {
+  if (!ctx.appRole || ROLE_RANK[ctx.appRole] < ROLE_RANK[min]) {
     redirect("/");
   }
   return ctx;
