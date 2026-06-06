@@ -2,17 +2,29 @@ import { OrderStatus } from "@/generated/prisma/client";
 import { getAuthContext } from "@/lib/auth";
 import { db, getOrgDb } from "@/lib/db";
 import { getCityResolver } from "@/lib/shipping/resolve";
-import { ShippingView, type ShippingRow } from "./shipping-view";
+import {
+  ShippingView,
+  type DeliveryNoteRow,
+  type ShippingRow,
+} from "./shipping-view";
 
 export const dynamic = "force-dynamic";
 
 export default async function ShippingPage() {
   const { orgId, appRole } = await getAuthContext();
   if (!orgId) {
-    return <ShippingView rows={[]} cities={[]} role={appRole} cityCount={0} />;
+    return (
+      <ShippingView
+        rows={[]}
+        cities={[]}
+        notes={[]}
+        role={appRole}
+        cityCount={0}
+      />
+    );
   }
 
-  const [resolver, cityCount, orders] = await Promise.all([
+  const [resolver, cityCount, orders, notes] = await Promise.all([
     getCityResolver(orgId),
     db.cityCatalog.count(),
     getOrgDb(orgId).order.findMany({
@@ -20,6 +32,18 @@ export default async function ShippingPage() {
       include: { customer: { select: { name: true } } },
       orderBy: { createdAt: "desc" },
       take: 500,
+    }),
+    getOrgDb(orgId).deliveryNote.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 100,
+      select: {
+        id: true,
+        ref: true,
+        parcelCount: true,
+        pdfUrl: true,
+        labelsUrl: true,
+        createdAt: true,
+      },
     }),
   ]);
 
@@ -48,10 +72,20 @@ export default async function ShippingPage() {
     };
   });
 
+  const noteRows: DeliveryNoteRow[] = notes.map((n) => ({
+    id: n.id,
+    ref: n.ref,
+    parcelCount: n.parcelCount,
+    pdfUrl: n.pdfUrl,
+    labelsUrl: n.labelsUrl,
+    createdAt: n.createdAt.toISOString(),
+  }));
+
   return (
     <ShippingView
       rows={rows}
       cities={resolver.cities}
+      notes={noteRows}
       role={appRole}
       cityCount={cityCount}
     />
