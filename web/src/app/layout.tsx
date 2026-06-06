@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { clerkPublishableKey } from "@/lib/clerk-env";
+import { ThemeProvider } from "@/components/theme-provider";
+import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 const plusJakartaSans = Plus_Jakarta_Sans({
@@ -33,7 +35,15 @@ export default function RootLayout({
         <body
           className={`${plusJakartaSans.variable} ${jetBrainsMono.variable} min-h-dvh antialiased`}
         >
-          {children}
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="light"
+            enableSystem
+            disableTransitionOnChange
+          >
+            {children}
+            <Toaster />
+          </ThemeProvider>
         </body>
       </html>
     </ClerkProvider>
