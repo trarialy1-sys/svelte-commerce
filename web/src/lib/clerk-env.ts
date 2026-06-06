@@ -16,4 +16,3 @@ function clean(value: string | undefined): string | undefined {
 export const clerkPublishableKey = clean(
   process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
 );
-export const clerkSecretKey = clean(process.env.CLERK_SECRET_KEY);
