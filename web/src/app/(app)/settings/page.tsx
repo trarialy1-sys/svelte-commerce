@@ -1,6 +1,8 @@
 import Link from "next/link";
-import { Plug, Users } from "lucide-react";
+import { MapPin, Plug, Users } from "lucide-react";
 
+import { db } from "@/lib/db";
+import { getAuthContext, meetsOrgRole } from "@/lib/auth";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,6 +12,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { CityCatalogButton } from "./city-catalog-button";
+
+export const dynamic = "force-dynamic";
 
 const SECTIONS = [
   {
@@ -26,7 +31,12 @@ const SECTIONS = [
   },
 ];
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
+  const { appRole } = await getAuthContext();
+  const isAdmin = meetsOrgRole(appRole, "admin");
+  // CityCatalog is a global table — count is shared across orgs.
+  const cityCount = await db.cityCatalog.count();
+
   return (
     <>
       <PageHeader title="Paramètres" subtitle="Configuration de l'organisation." />
@@ -54,6 +64,32 @@ export default function SettingsPage() {
             </Card>
           );
         })}
+
+        {isAdmin ? (
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <span className="bg-accent text-accent-foreground flex size-10 items-center justify-center rounded-lg">
+                  <MapPin className="size-5" />
+                </span>
+                <div>
+                  <CardTitle className="text-base">Catalogue des villes</CardTitle>
+                  <CardDescription>
+                    Villes OzonExpress utilisées pour la résolution d&apos;adresse.
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="flex items-center justify-between gap-2">
+              <p className="text-muted-foreground text-sm">
+                {cityCount > 0
+                  ? `${cityCount} villes chargées`
+                  : "Aucune ville chargée"}
+              </p>
+              <CityCatalogButton />
+            </CardContent>
+          </Card>
+        ) : null}
       </div>
     </>
   );
