@@ -1,4 +1,5 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { clerkPublishableKey, clerkSecretKey } from "@/lib/clerk-env";
 
 // Next.js 16 renamed Middleware → Proxy (same behaviour, file is `proxy.ts`).
 // This is a convenience gate only — authoritative checks are re-run server-side
@@ -6,11 +7,14 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
 const isPublicRoute = createRouteMatcher(["/sign-in(.*)", "/sign-up(.*)"]);
 
-export default clerkMiddleware(async (auth, req) => {
-  if (!isPublicRoute(req)) {
-    await auth.protect();
-  }
-});
+export default clerkMiddleware(
+  async (auth, req) => {
+    if (!isPublicRoute(req)) {
+      await auth.protect();
+    }
+  },
+  { publishableKey: clerkPublishableKey, secretKey: clerkSecretKey }
+);
 
 export const config = {
   matcher: [
