@@ -16,6 +16,7 @@ const ACTION_LABELS: Record<string, string> = {
   "shipping.bl_created": "Bon de livraison créé",
   "shipping.alias_learned": "Ville corrigée",
   "shipping.cities_refreshed": "Villes actualisées",
+  "shipping.status_synced": "Statuts synchronisés",
   "stock.rupture": "Mise en rupture",
   "stock.restock": "Réapprovisionnement",
   "catalog.synced": "Catalogue synchronisé",
