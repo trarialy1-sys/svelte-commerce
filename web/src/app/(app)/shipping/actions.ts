@@ -7,8 +7,27 @@ import { requireOrgRole } from "@/lib/auth";
 import { learnCityAlias } from "@/lib/shipping/learn";
 import { createParcelForOrder, type ParcelResult } from "@/lib/shipping/ozon";
 import { buildBLOnly, createDeliveryNote, type BLResult } from "@/lib/shipping/bl";
+import { syncParcelStatuses, type SyncResult } from "@/lib/shipping/status-sync";
 
 type Result<T = unknown> = { ok: true; data: T } | { ok: false; message: string };
+
+/**
+ * Manual "Actualiser les statuts" — poll OzonExpress for this org's active
+ * parcels and update changed statuses. Operator+ (operational, like sending).
+ */
+export async function syncStatusesAction(): Promise<Result<SyncResult>> {
+  const { orgId, userId } = await requireOrgRole("operator");
+  const res = await syncParcelStatuses(orgId!, { actorUserId: userId });
+  if (!res.configured) {
+    return {
+      ok: false,
+      message: "Suivi OzonExpress pas encore configuré (endpoint en attente).",
+    };
+  }
+  revalidatePath("/shipping");
+  revalidatePath("/dashboard");
+  return { ok: true, data: res };
+}
 
 /**
  * Persist an operator's city correction on an order and learn the alias.
