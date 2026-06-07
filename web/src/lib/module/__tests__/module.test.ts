@@ -2,21 +2,52 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { db, getOrgDb } from "@/lib/db";
 import { CustomerSegment } from "@/generated/prisma/client";
-import { customersConfig } from "@/modules/customers/config";
 import { exportRows, listModule, parseListParams } from "@/lib/module/query";
-import { MODULE_REGISTRY } from "@/lib/module/registry";
+import type { ModuleConfig } from "@/lib/module/types";
 
 const ORG_A = "org_mod_A";
 const ORG_B = "org_mod_B";
 
+// Self-contained config exercising the generic framework against the customer
+// model (decoupled from the real CRM customers module, which uses a custom list).
+const testConfig: ModuleConfig = {
+  key: "customers",
+  model: "customer",
+  title: "Test",
+  columns: [
+    { key: "name", label: "Nom", type: "who", sortable: true },
+    { key: "city", label: "Ville", type: "text", sortable: true },
+    { key: "segment", label: "Segment", type: "badge" },
+    { key: "ordersCount", label: "Commandes", type: "number", sortable: true },
+    { key: "createdAt", label: "Créé le", type: "date", sortable: true },
+  ],
+  searchFields: ["name", "phone", "city"],
+  filters: [
+    {
+      kind: "select",
+      key: "segment",
+      label: "Segment",
+      options: [
+        { value: "NOUVEAU", label: "Nouveau" },
+        { value: "RECURRENT", label: "Récurrent" },
+        { value: "VIP", label: "VIP" },
+      ],
+    },
+    { kind: "dateRange", key: "createdAt", label: "Date" },
+  ],
+  defaultSort: { field: "createdAt", dir: "desc" },
+};
+
 function params(overrides: Record<string, string>) {
-  return parseListParams(new URLSearchParams(overrides), customersConfig);
+  return parseListParams(new URLSearchParams(overrides), testConfig);
 }
 
-function markVip() {
-  const handler = MODULE_REGISTRY.customers.bulkHandlers?.mark_vip;
-  if (!handler) throw new Error("mark_vip handler missing");
-  return handler;
+async function markVip(orgId: string, ids: string[]) {
+  const res = await getOrgDb(orgId).customer.updateMany({
+    where: { id: { in: ids } },
+    data: { segment: CustomerSegment.VIP },
+  });
+  return { updated: res.count };
 }
 
 async function cleanup() {
@@ -73,7 +104,7 @@ describe("module framework — list/filter/sort/paginate (server-side)", () => {
   it("paginates and scopes to the org", async () => {
     const res = await listModule(
       ORG_A,
-      customersConfig,
+      testConfig,
       params({ pageSize: "10", page: "1" })
     );
     expect(res.total).toBe(30);
@@ -84,7 +115,7 @@ describe("module framework — list/filter/sort/paginate (server-side)", () => {
   it("filters by segment", async () => {
     const res = await listModule(
       ORG_A,
-      customersConfig,
+      testConfig,
       params({ segment: "VIP", pageSize: "100" })
     );
     expect(res.total).toBeGreaterThan(0);
@@ -94,7 +125,7 @@ describe("module framework — list/filter/sort/paginate (server-side)", () => {
   it("searches name/phone/city (case-insensitive)", async () => {
     const res = await listModule(
       ORG_A,
-      customersConfig,
+      testConfig,
       params({ q: "casablanca", pageSize: "100" })
     );
     expect(res.total).toBeGreaterThan(0);
@@ -106,7 +137,7 @@ describe("module framework — list/filter/sort/paginate (server-side)", () => {
   it("sorts by ordersCount ascending", async () => {
     const res = await listModule(
       ORG_A,
-      customersConfig,
+      testConfig,
       params({ sort: "ordersCount:asc", pageSize: "100" })
     );
     const counts = res.rows.map((r) => Number(r.ordersCount));
@@ -116,7 +147,7 @@ describe("module framework — list/filter/sort/paginate (server-side)", () => {
   it("applies a date range filter (gte/lte, inclusive)", async () => {
     const res = await listModule(
       ORG_A,
-      customersConfig,
+      testConfig,
       params({
         createdAt_from: "2025-01-01",
         createdAt_to: "2025-01-10",
@@ -127,11 +158,7 @@ describe("module framework — list/filter/sort/paginate (server-side)", () => {
   });
 
   it("org A never sees org B rows", async () => {
-    const res = await listModule(
-      ORG_A,
-      customersConfig,
-      params({ pageSize: "100" })
-    );
+    const res = await listModule(ORG_A, testConfig, params({ pageSize: "100" }));
     expect(res.rows.some((r) => String(r.name).startsWith("Cust B"))).toBe(false);
   });
 });
@@ -140,13 +167,11 @@ describe("export respects filters + org scope", () => {
   it("exports only VIP rows for org A", async () => {
     const rows = await exportRows(
       ORG_A,
-      customersConfig,
+      testConfig,
       params({ segment: "VIP", pageSize: "100" })
     );
     expect(rows.length).toBeGreaterThan(0);
-    expect(rows.every((r) => r.segment === "VIP" && r.orgId === ORG_A)).toBe(
-      true
-    );
+    expect(rows.every((r) => r.segment === "VIP" && r.orgId === ORG_A)).toBe(true);
   });
 });
 
@@ -157,7 +182,7 @@ describe("bulk handler mark_vip — scoped + effective", () => {
       take: 3,
     });
     const ids = some.map((r) => r.id);
-    const { updated } = await markVip()(ORG_A, ids);
+    const { updated } = await markVip(ORG_A, ids);
     expect(updated).toBe(ids.length);
     const after = await getOrgDb(ORG_A).customer.findMany({
       where: { id: { in: ids } },
@@ -168,7 +193,7 @@ describe("bulk handler mark_vip — scoped + effective", () => {
   it("cannot touch another org's rows", async () => {
     const bRows = await getOrgDb(ORG_B).customer.findMany({});
     const bIds = bRows.map((r) => r.id);
-    const { updated } = await markVip()(ORG_A, bIds);
+    const { updated } = await markVip(ORG_A, bIds);
     expect(updated).toBe(0);
     const bAfter = await getOrgDb(ORG_B).customer.findMany({});
     expect(bAfter.every((r) => r.segment === "NOUVEAU")).toBe(true);

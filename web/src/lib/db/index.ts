@@ -14,6 +14,7 @@ const TENANT_MODELS = new Set<string>([
   "Product",
   "Variant",
   "Customer",
+  "CustomerNote",
   "Order",
   "OrderItem",
   "Parcel",

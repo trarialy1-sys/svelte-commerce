@@ -37,6 +37,10 @@ function valueFor(
     case "money":
     case "number":
       return Number(raw as string | number);
+    case "tags":
+      return Array.isArray(raw) ? (raw as string[]).join("; ") : "";
+    case "bool":
+      return raw ? "Oui" : "Non";
     default:
       return String(raw);
   }
@@ -69,7 +73,9 @@ export async function GET(
   }
 
   const listParams = parseListParams(req.nextUrl.searchParams, entry.config);
-  const rows = await exportRows(orgId, entry.config, listParams);
+  const rows = entry.exportRows
+    ? await entry.exportRows(orgId, listParams, { appRole })
+    : await exportRows(orgId, entry.config, listParams);
 
   const cols: ExportColumn[] =
     entry.config.exportColumns ??

@@ -1,7 +1,7 @@
 import "server-only";
 
 import { getOrgDb } from "@/lib/db";
-import { CustomerSegment, OrderStatus, Role } from "@/generated/prisma/client";
+import { OrderStatus, Role } from "@/generated/prisma/client";
 import { meetsOrgRole, type AppRole } from "@/lib/auth/roles";
 import { auditConfig } from "@/modules/audit/config";
 import { customersConfig } from "@/modules/customers/config";
@@ -12,7 +12,8 @@ import {
   ordersReadyConfig,
   ordersToConfirmConfig,
 } from "@/modules/orders/config";
-import type { ModuleConfig } from "./types";
+import { exportCustomers, listCustomers } from "@/modules/customers/list";
+import type { ListParams, ListResult, ModuleConfig, Row } from "./types";
 
 export interface BulkContext {
   /** Clerk user id of the operator running the action. */
@@ -25,9 +26,25 @@ export type BulkHandler = (
   ctx?: BulkContext
 ) => Promise<{ updated: number }>;
 
+export interface ListContext {
+  appRole: AppRole | null;
+}
+
 export interface RegistryEntry {
   config: ModuleConfig;
   bulkHandlers?: Record<string, BulkHandler>;
+  /** Custom list (overrides the generic query) — e.g. computed aggregates. */
+  list?: (
+    orgId: string,
+    params: ListParams,
+    ctx: ListContext
+  ) => Promise<ListResult>;
+  /** Custom export rows (overrides the generic export). */
+  exportRows?: (
+    orgId: string,
+    params: ListParams,
+    ctx: ListContext
+  ) => Promise<Row[]>;
 }
 
 /**
@@ -37,15 +54,8 @@ export interface RegistryEntry {
 export const MODULE_REGISTRY: Record<string, RegistryEntry> = {
   customers: {
     config: customersConfig,
-    bulkHandlers: {
-      mark_vip: async (orgId, ids) => {
-        const res = await getOrgDb(orgId).customer.updateMany({
-          where: { id: { in: ids } },
-          data: { segment: CustomerSegment.VIP },
-        });
-        return { updated: res.count };
-      },
-    },
+    list: listCustomers,
+    exportRows: exportCustomers,
   },
   catalog: { config: catalogConfig },
   stock: { config: stockConfig },

@@ -55,6 +55,18 @@ export function formatDateISO(value: Date | string | null | undefined): string {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * Moroccan display phone: re-add the leading 0 dropped by Excel imports
+ * (9 digits → 0XXXXXXXXX), strip a +212 / 212 country prefix, then group.
+ */
+export function displayPhoneMA(value: string | null | undefined): string {
+  if (!value) return "—";
+  let p = String(value).replace(/\D/g, "");
+  if (p.startsWith("212")) p = `0${p.slice(3)}`;
+  if (p.length === 9 && !p.startsWith("0")) p = `0${p}`;
+  return formatPhone(p);
+}
+
 /** Light phone grouping (Moroccan-style, non-destructive). */
 export function formatPhone(value: string | null | undefined): string {
   if (!value) return "—";

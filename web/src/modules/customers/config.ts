@@ -1,64 +1,80 @@
-import type { ModuleConfig } from "@/lib/module/types";
+import type { Column, ExportColumn, Filter, ModuleConfig } from "@/lib/module/types";
+
+const RETURN_TONES: Record<string, string> = {
+  none: "neutral",
+  ok: "green",
+  probleme: "red",
+};
+const RETURN_LABELS: Record<string, string> = {
+  none: "Aucun",
+  ok: "Fiable",
+  probleme: "Problème",
+};
+
+const COLUMNS: Column[] = [
+  { key: "name", label: "Nom", type: "who", sortable: true },
+  { key: "phoneDisplay", label: "Téléphone", type: "mono" },
+  { key: "city", label: "Ville", type: "text", sortable: true },
+  {
+    key: "ordersCount",
+    label: "Commandes",
+    type: "number",
+    align: "right",
+    sortable: true,
+  },
+  { key: "lastOrderAt", label: "Dernière commande", type: "date", sortable: true },
+  {
+    key: "returnState",
+    label: "Retours",
+    type: "badge",
+    badgeMap: RETURN_TONES,
+    labelMap: RETURN_LABELS,
+  },
+  { key: "tags", label: "Tags", type: "tags" },
+  {
+    key: "isBlocked",
+    label: "Bloqué",
+    type: "bool",
+    badgeMap: { true: "red" },
+    labelMap: { true: "Bloqué" },
+  },
+  // COD money — owner/admin only (the page strips this column for others, and
+  // the list endpoint omits the value).
+  { key: "codDelivered", label: "COD livré", type: "money", align: "right" },
+];
+
+const FILTERS: Filter[] = [
+  { kind: "boolean", key: "blocked", label: "Bloqué" },
+  { kind: "boolean", key: "hasReturns", label: "A des retours" },
+  // Options are injected per-request by the page (distinct cities / tags).
+  { kind: "select", key: "city", label: "Ville", options: [] },
+  { kind: "select", key: "tag", label: "Tag", options: [] },
+];
+
+const EXPORT_COLUMNS: ExportColumn[] = [
+  { key: "name", label: "Nom" },
+  { key: "phoneDisplay", label: "Téléphone" },
+  { key: "city", label: "Ville" },
+  { key: "ordersCount", label: "Commandes" },
+  { key: "lastOrderAt", label: "Dernière commande" },
+  { key: "returnState", label: "Retours" },
+  { key: "tags", label: "Tags" },
+  { key: "isBlocked", label: "Bloqué" },
+];
 
 /**
- * Demo module config — the reference implementation of the framework.
- * Pure data (no functions) so it can cross the server/client boundary.
- * Real CRM logic arrives in Chunk 2.1.
+ * Clients (CRM) list config. The list/export run through custom handlers in the
+ * registry (COD-aware aggregates), not the generic query — but the columns,
+ * filters and search still drive the shared <DataTable> UI and param parsing.
  */
 export const customersConfig: ModuleConfig = {
   key: "customers",
   model: "customer",
   title: "Clients",
-  subtitle: "Base clients et segments.",
-  columns: [
-    { key: "name", label: "Nom", type: "who", sortable: true },
-    { key: "phone", label: "Téléphone", type: "mono" },
-    { key: "city", label: "Ville", type: "text", sortable: true },
-    {
-      key: "segment",
-      label: "Segment",
-      type: "badge",
-      badgeMap: { NOUVEAU: "blue", RECURRENT: "green", VIP: "violet" },
-    },
-    {
-      key: "ordersCount",
-      label: "Commandes",
-      type: "number",
-      align: "right",
-      sortable: true,
-    },
-    {
-      key: "totalSpent",
-      label: "Total dépensé",
-      type: "money",
-      align: "right",
-      sortable: true,
-    },
-    { key: "createdAt", label: "Créé le", type: "date", sortable: true },
-  ],
+  subtitle: "Fiabilité COD, historique et notes.",
+  columns: COLUMNS,
   searchFields: ["name", "phone", "city"],
-  filters: [
-    {
-      kind: "select",
-      key: "segment",
-      label: "Segment",
-      options: [
-        { value: "NOUVEAU", label: "Nouveau" },
-        { value: "RECURRENT", label: "Récurrent" },
-        { value: "VIP", label: "VIP" },
-      ],
-    },
-    { kind: "dateRange", key: "createdAt", label: "Date de création" },
-  ],
-  defaultSort: { field: "createdAt", dir: "desc" },
-  bulkActions: [{ key: "mark_vip", label: "Marquer VIP", minRole: "ADMIN" }],
-  exportColumns: [
-    { key: "name", label: "Nom" },
-    { key: "phone", label: "Téléphone" },
-    { key: "city", label: "Ville" },
-    { key: "segment", label: "Segment" },
-    { key: "ordersCount", label: "Commandes" },
-    { key: "totalSpent", label: "Total dépensé" },
-    { key: "createdAt", label: "Créé le" },
-  ],
+  filters: FILTERS,
+  defaultSort: { field: "lastOrderAt", dir: "desc" },
+  exportColumns: EXPORT_COLUMNS,
 };

@@ -81,6 +81,28 @@ function Cell({ column, row }: { column: Column; row: Row }) {
         column.labelMap?.[v] ?? v.charAt(0) + v.slice(1).toLowerCase();
       return <StatusBadge status={v} tone={tone as never} label={label} />;
     }
+    case "tags": {
+      const arr = Array.isArray(value) ? (value as string[]) : [];
+      if (arr.length === 0) return <span className="text-muted-foreground">—</span>;
+      return (
+        <div className="flex flex-wrap gap-1">
+          {arr.map((t) => (
+            <span
+              key={t}
+              className="bg-accent text-accent-foreground rounded px-1.5 py-0.5 text-xs"
+            >
+              {t}
+            </span>
+          ))}
+        </div>
+      );
+    }
+    case "bool": {
+      if (!value) return <span className="text-muted-foreground">—</span>;
+      const tone = column.badgeMap?.["true"] ?? "red";
+      const label = column.labelMap?.["true"] ?? column.label;
+      return <StatusBadge status="true" tone={tone as never} label={label} />;
+    }
     case "who":
       return (
         <div className="flex items-center gap-2">

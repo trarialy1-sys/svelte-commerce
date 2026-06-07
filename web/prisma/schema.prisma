@@ -90,6 +90,7 @@ model Organization {
   neighAliases        NeighAlias[]
   financeSettings     FinanceSettings?
   auditLogs           AuditLog[]
+  customerNotes       CustomerNote[]
 }
 
 model User {
@@ -101,6 +102,7 @@ model User {
   updatedAt   DateTime @updatedAt
   memberships Membership[]
   auditLogs   AuditLog[]
+  customerNotes CustomerNote[]
 }
 
 model Membership {
@@ -179,6 +181,9 @@ model Customer {
   phone        String
   city         String?
   segment      CustomerSegment @default(NOUVEAU)
+  tags         String[]        @default([])
+  isBlocked    Boolean         @default(false)
+  blockedReason String?
   ordersCount  Int             @default(0)
   totalSpent   Decimal         @default(0) @db.Decimal(12, 2)
   firstOrderAt DateTime?
@@ -186,10 +191,25 @@ model Customer {
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
   orders       Order[]
+  notes        CustomerNote[]
   org          Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   @@unique([orgId, phone])
   @@index([orgId])
+}
+
+model CustomerNote {
+  id         String   @id @default(cuid())
+  orgId      String
+  customerId String
+  body       String
+  authorId   String? // Clerk user id
+  createdAt  DateTime @default(now())
+  customer   Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  author     User?        @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  org        Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, customerId, createdAt])
 }
 
 model Order {
