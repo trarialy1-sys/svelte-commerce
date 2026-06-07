@@ -8,6 +8,7 @@ export type ColumnType =
   | "mono"
   | "money"
   | "date"
+  | "datetime"
   | "number"
   | "badge"
   | "who"
@@ -64,6 +65,8 @@ export interface ModuleConfig {
   model: string;
   title: string;
   subtitle?: string;
+  /** Minimum role required to list/export this module (enforced in the API). */
+  minRole?: Role;
   columns: Column[];
   /** case-insensitive `contains` OR-match */
   searchFields: string[];

@@ -7,6 +7,23 @@ import { db, withOrg } from "@/lib/db";
 // signature, not Clerk auth. Keep on the Node runtime (Prisma + pg).
 export const runtime = "nodejs";
 
+/** Map a fine app-role string (from invitation metadata) onto the DB Role. */
+function readAppRole(meta: unknown): Role | null {
+  const v = (meta as { appRole?: unknown } | null)?.appRole;
+  switch (v) {
+    case "owner":
+      return Role.OWNER;
+    case "admin":
+      return Role.ADMIN;
+    case "operator":
+      return Role.OPERATOR;
+    case "viewer":
+      return Role.VIEWER;
+    default:
+      return null;
+  }
+}
+
 function emailOf(data: {
   email_addresses?: Array<{ id: string; email_address: string }>;
   primary_email_address_id?: string | null;
@@ -112,16 +129,17 @@ async function handleEvent(evt: WebhookEvent): Promise<void> {
         },
         update: {},
       });
+      // Prefer the fine role carried on the invitation's public metadata (set
+      // by our Team invite flow); fall back to Clerk's coarse role otherwise.
+      const fineRole =
+        readAppRole((d as { public_metadata?: unknown }).public_metadata) ??
+        (d.role === "org:admin" ? Role.ADMIN : Role.OPERATOR);
       // Membership is RLS-protected → set the org GUC. Role mapped on CREATE
       // only; never downgrade an existing (possibly promoted) DB role.
       await withOrg(orgId, (tx) =>
         tx.membership.upsert({
           where: { orgId_userId: { orgId, userId } },
-          create: {
-            orgId,
-            userId,
-            role: d.role === "org:admin" ? Role.ADMIN : Role.OPERATOR,
-          },
+          create: { orgId, userId, role: fineRole },
           update: {},
         })
       );

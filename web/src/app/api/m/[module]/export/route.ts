@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import * as XLSX from "xlsx";
 
 import { getAuthContext } from "@/lib/auth";
-import { getModule } from "@/lib/module/registry";
+import { getModule, moduleAllowed } from "@/lib/module/registry";
 import { exportRows, parseListParams } from "@/lib/module/query";
 import { formatDateISO } from "@/lib/format";
 import type { ExportColumn, ModuleConfig, Row } from "@/lib/module/types";
@@ -30,6 +30,10 @@ function valueFor(
   switch (column?.type) {
     case "date":
       return formatDateISO(raw as string | Date);
+    case "datetime": {
+      const d = raw instanceof Date ? raw : new Date(raw as string);
+      return Number.isNaN(d.getTime()) ? "" : d.toISOString();
+    }
     case "money":
     case "number":
       return Number(raw as string | number);
@@ -53,12 +57,15 @@ export async function GET(
     return NextResponse.json({ error: "Unknown module" }, { status: 404 });
   }
 
-  const { userId, orgId } = await getAuthContext();
+  const { userId, orgId, appRole } = await getAuthContext();
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   if (!orgId) {
     return NextResponse.json({ error: "No active organization" }, { status: 400 });
+  }
+  if (!moduleAllowed(entry.config, appRole)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const listParams = parseListParams(req.nextUrl.searchParams, entry.config);

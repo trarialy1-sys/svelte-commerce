@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { getAuthContext } from "@/lib/auth";
-import { getModule } from "@/lib/module/registry";
+import { getModule, moduleAllowed } from "@/lib/module/registry";
 import { listModule, parseListParams } from "@/lib/module/query";
 
 export const runtime = "nodejs";
@@ -17,12 +17,15 @@ export async function GET(
     return NextResponse.json({ error: "Unknown module" }, { status: 404 });
   }
 
-  const { userId, orgId } = await getAuthContext();
+  const { userId, orgId, appRole } = await getAuthContext();
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   if (!orgId) {
     return NextResponse.json({ rows: [], total: 0, page: 1, pageSize: 25 });
+  }
+  if (!moduleAllowed(entry.config, appRole)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const listParams = parseListParams(req.nextUrl.searchParams, entry.config);

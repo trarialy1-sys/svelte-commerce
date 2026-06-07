@@ -9,23 +9,9 @@ import { db, getOrgDb, withOrg } from "@/lib/db";
 import { LOW_STOCK_THRESHOLD } from "@/lib/integrations/shopify/inventory";
 import type { AppRole } from "@/lib/auth/roles";
 import { meetsOrgRole } from "@/lib/auth/roles";
+import { getOrgSettings } from "@/lib/org/settings";
+import { dayInTz, localMidnightUTC } from "@/lib/time";
 import type { DashboardSummary } from "./types";
-
-// Africa/Casablanca is UTC+1 (fixed for v1 — see brief).
-const TZ_OFFSET_MIN = 60;
-
-/** UTC instant of the most recent local midnight in Africa/Casablanca. */
-function localMidnightUTC(): Date {
-  const local = new Date(Date.now() + TZ_OFFSET_MIN * 60_000);
-  local.setUTCHours(0, 0, 0, 0);
-  return new Date(local.getTime() - TZ_OFFSET_MIN * 60_000);
-}
-
-/** Casablanca-local YYYY-MM-DD for `offsetDays` ago. */
-function casaDay(offsetDays: number): string {
-  const t = new Date(Date.now() + TZ_OFFSET_MIN * 60_000 - offsetDays * 86_400_000);
-  return t.toISOString().slice(0, 10);
-}
 
 const PARCEL_IN_TRANSIT = [
   ParcelStatus.CREE,
@@ -85,7 +71,8 @@ export async function getDashboardSummary(
   role: AppRole | null
 ): Promise<DashboardSummary> {
   const odb = getOrgDb(orgId);
-  const today = localMidnightUTC();
+  const { timezone } = await getOrgSettings(orgId);
+  const today = localMidnightUTC(timezone);
   const weekAgo = new Date(Date.now() - 7 * 86_400_000);
   const canSeeFinance = meetsOrgRole(role, "admin");
 
@@ -134,7 +121,7 @@ export async function getDashboardSummary(
     }),
     withOrg(orgId, (tx) =>
       tx.$queryRaw<{ day: string; n: number }[]>`
-        SELECT to_char(date_trunc('day', "createdAt" AT TIME ZONE 'Africa/Casablanca'), 'YYYY-MM-DD') AS day,
+        SELECT to_char(date_trunc('day', "createdAt" AT TIME ZONE ${timezone}), 'YYYY-MM-DD') AS day,
                count(*)::int AS n
         FROM "Order"
         WHERE "createdAt" >= now() - interval '14 days'
@@ -168,7 +155,7 @@ export async function getDashboardSummary(
   const byDay = new Map(trendRows.map((r) => [r.day, Number(r.n)]));
   const trend: DashboardSummary["trend"] = [];
   for (let i = 13; i >= 0; i--) {
-    const d = casaDay(i);
+    const d = dayInTz(timezone, i);
     trend.push({ date: d, orders: byDay.get(d) ?? 0 });
   }
 

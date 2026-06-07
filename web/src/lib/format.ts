@@ -33,6 +33,20 @@ export function formatDate(value: Date | string | null | undefined): string {
   }).format(d);
 }
 
+/** Localized date + time (for audit timestamps). */
+export function formatDateTime(value: Date | string | null | undefined): string {
+  if (!value) return "—";
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return new Intl.DateTimeFormat("fr-FR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(d);
+}
+
 /** ISO date (yyyy-mm-dd) for exports/sorting. */
 export function formatDateISO(value: Date | string | null | undefined): string {
   if (!value) return "";

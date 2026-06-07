@@ -67,6 +67,9 @@ model Organization {
   id         String   @id // Clerk org id
   name       String
   slug       String?  @unique
+  logoUrl    String?
+  locale     String   @default("fr")
+  timezone   String   @default("Africa/Casablanca")
   currency   String   @default("MAD")
   brandColor String   @default("#C1542D")
   status     String   @default("active")
@@ -97,6 +100,7 @@ model User {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   memberships Membership[]
+  auditLogs   AuditLog[]
 }
 
 model Membership {
@@ -335,6 +339,7 @@ model AuditLog {
   ip          String?
   createdAt   DateTime @default(now())
   org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  actor       User?        @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
 
   @@index([orgId, createdAt])
 }
