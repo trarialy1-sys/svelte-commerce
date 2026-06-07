@@ -9,6 +9,7 @@ import {
   FileText,
   Loader2,
   MapPin,
+  RefreshCw,
   RotateCcw,
   Search,
   Send,
@@ -34,6 +35,7 @@ import {
   saveCityPickAction,
   saveCityPicksAction,
   sendParcelsAction,
+  syncStatusesAction,
 } from "./actions";
 
 export interface CityRow {
@@ -185,6 +187,26 @@ export function ShippingView({
   const [retrying, setRetrying] = React.useState<string | null>(null);
   const [bl, setBl] = React.useState<BLResult | null>(null);
   const [blPending, setBlPending] = React.useState(false);
+  const [syncing, setSyncing] = React.useState(false);
+
+  async function onSyncStatuses() {
+    setSyncing(true);
+    try {
+      const r = await syncStatusesAction();
+      if (r.ok) {
+        const d = r.data;
+        toast.success(
+          d.updated > 0
+            ? `${d.updated} statut(s) mis à jour (${d.polled} suivis).`
+            : `Aucun changement (${d.polled} colis suivis).`
+        );
+      } else {
+        toast.error(r.message);
+      }
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   function resolvedOf(row: ShippingRow): { id: number; name: string } | null {
     if (picks[row.id]) return picks[row.id];
@@ -369,6 +391,18 @@ export function ShippingView({
       <PageHeader
         title="Livraisons & BL"
         subtitle="Corrigez les villes, créez les colis OzonExpress et le Bon de Livraison."
+        actions={
+          canWrite ? (
+            <Button variant="outline" size="sm" onClick={onSyncStatuses} disabled={syncing}>
+              {syncing ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <RefreshCw className="size-4" />
+              )}
+              Actualiser les statuts
+            </Button>
+          ) : undefined
+        }
       />
 
       <Tabs defaultValue="ship">

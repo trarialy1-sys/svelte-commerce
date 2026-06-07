@@ -272,6 +272,7 @@ model Parcel {
   returnFee   Decimal?     @db.Decimal(10, 2)
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
+  lastStatusSyncAt DateTime?
   order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
   dnLinks     DeliveryNoteParcel[]
   org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)

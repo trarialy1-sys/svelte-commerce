@@ -9,6 +9,7 @@ const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/api/webhooks(.*)", // Clerk webhook — verified by svix signature, not auth
+  "/api/cron(.*)", // Vercel Cron — verified by CRON_SECRET in the route, no session
 ]);
 
 export default clerkMiddleware(
