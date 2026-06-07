@@ -11,6 +11,8 @@ export type ColumnType =
   | "datetime"
   | "number"
   | "badge"
+  | "tags"
+  | "bool"
   | "who"
   | "custom";
 

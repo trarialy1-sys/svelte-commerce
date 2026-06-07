@@ -29,6 +29,8 @@ export async function GET(
   }
 
   const listParams = parseListParams(req.nextUrl.searchParams, entry.config);
-  const result = await listModule(orgId, entry.config, listParams);
+  const result = entry.list
+    ? await entry.list(orgId, listParams, { appRole })
+    : await listModule(orgId, entry.config, listParams);
   return NextResponse.json(result);
 }
