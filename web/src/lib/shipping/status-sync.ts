@@ -3,7 +3,6 @@ import "server-only";
 import { ParcelStatus } from "@/generated/prisma/client";
 import { getOrgDb } from "@/lib/db";
 import { getOzonClient, type OzonClient } from "./ozon";
-import { deepFindKey } from "./ozon-helpers";
 import { mapOzonStatus } from "./ozon-status-map";
 
 // Terminal statuses are never re-polled — caps the work per run.
@@ -14,33 +13,44 @@ const TERMINAL: ParcelStatus[] = [
 ];
 
 // ── Live OzonExpress tracking call ───────────────────────────────────────────
-// ⚠️ CONFIRM: OzonExpress's tracking/status endpoint (path + response shape) is
-// not yet verified. While `LIVE_ENABLED` is false the sync NEVER hits a guessed
-// endpoint and reports "not configured" — so it can't waste calls or mis-update.
-// To go live: confirm the endpoint, set OZON_TRACKING_PATH + STATUS_KEYS, add the
-// real strings to ozon-status-map.ts, then flip LIVE_ENABLED to true.
-export const LIVE_ENABLED = false;
-const OZON_TRACKING_PATH = "tracking"; // CONFIRM exact path
-const STATUS_KEYS = ["STATUS", "STATUT", "status", "LAST-STATUS", "PARCEL-STATUS"]; // CONFIRM
+// Endpoint confirmed: POST customers/{id}/{key}/tracking, form-data
+// `tracking-number`. Response: { CHECK_API:{RESULT}, TRACKING:{ RESULT,
+// LAST_TRACKING:{ STATUT }, HISTORY:{…} } }. Status lives at
+// TRACKING.LAST_TRACKING.STATUT (e.g. "Nouveau Colis").
+// NOTE: Ozon also supports bulk tracking (JSON array); we use per-parcel calls
+// (confirmed shape) batched + throttled — fine for current volume. Switching to
+// bulk is a future optimization if volume grows (→ Phase 3 territory).
+export const LIVE_ENABLED = true;
+const OZON_TRACKING_PATH = "tracking";
+
+interface TrackingResponse {
+  CHECK_API?: { RESULT?: string; MESSAGE?: string };
+  TRACKING?: {
+    RESULT?: string;
+    LAST_TRACKING?: { STATUT?: string };
+  };
+}
 
 export type OzonStatusFetcher = (
   client: OzonClient,
   tracking: string
 ) => Promise<string | null>;
 
-/** Default live fetcher — posts the tracking number, deep-finds a status field. */
+/** Live fetcher — returns the parcel's current Ozon STATUT string, or null. */
 async function fetchOzonStatusLive(
   client: OzonClient,
   tracking: string
 ): Promise<string | null> {
   const fd = new FormData();
   fd.append("tracking-number", tracking);
-  const j = await client.post(OZON_TRACKING_PATH, fd);
-  for (const k of STATUS_KEYS) {
-    const v = deepFindKey(j, k);
-    if (v != null && String(v).trim()) return String(v);
+  const j = (await client.post(OZON_TRACKING_PATH, fd)) as TrackingResponse;
+
+  if (j?.CHECK_API?.RESULT === "ERROR") {
+    throw new Error(j.CHECK_API.MESSAGE || "OzonExpress: clé API invalide.");
   }
-  return null;
+  if (j?.TRACKING?.RESULT !== "SUCCESS") return null; // unknown/invalid tracking
+  const statut = j.TRACKING.LAST_TRACKING?.STATUT;
+  return statut ? String(statut) : null;
 }
 
 export interface SyncResult {
@@ -93,6 +103,7 @@ export async function syncParcelStatuses(
   let updated = 0;
   let failed = 0;
   const byStatus: Record<string, number> = {};
+  const unknown = new Set<string>();
   const BATCH = 5;
 
   for (let i = 0; i < parcels.length; i += BATCH) {
@@ -104,7 +115,8 @@ export async function syncParcelStatuses(
           if (raw == null) return;
           const mapped = mapOzonStatus(raw);
           if (!mapped) {
-            // Unknown vocabulary → leave unchanged (never guess).
+            // Unknown vocabulary → leave unchanged (never guess); surface it.
+            unknown.add(raw);
             console.warn(`[status-sync] unknown Ozon status "${raw}" (${p.tracking})`);
             return;
           }
@@ -124,14 +136,21 @@ export async function syncParcelStatuses(
     if (i + BATCH < parcels.length) await sleep(300); // throttle between batches
   }
 
-  if (updated > 0 || failed > 0) {
+  if (updated > 0 || failed > 0 || unknown.size > 0) {
     await odb.auditLog.create({
       data: {
         orgId,
         actorUserId: opts.actorUserId ?? null,
         action: "shipping.status_synced",
         entity: "Parcel",
-        meta: { polled: parcels.length, updated, failed, byStatus },
+        meta: {
+          polled: parcels.length,
+          updated,
+          failed,
+          byStatus,
+          // Unmapped Ozon strings → add them to ozon-status-map.ts.
+          ...(unknown.size > 0 ? { unknownStatuses: [...unknown].slice(0, 20) } : {}),
+        },
       },
     });
   }

@@ -35,6 +35,8 @@ function humanize(action: string, meta: unknown): string {
       return "a corrigé une ville";
     case "shipping.cities_refreshed":
       return `a actualisé le catalogue des villes (${m.count ?? 0})`;
+    case "shipping.status_synced":
+      return `a synchronisé ${m.updated ?? 0} statut(s) de colis`;
     case "stock.rupture":
       return `a marqué ${n ?? ""} article(s) en rupture`.replace("  ", " ").trim();
     case "stock.restock":
