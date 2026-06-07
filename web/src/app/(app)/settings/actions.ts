@@ -5,8 +5,9 @@ import { clerkClient } from "@clerk/nextjs/server";
 
 import { Prisma, Role } from "@/generated/prisma/client";
 import { db, getOrgDb } from "@/lib/db";
-import { requireOrgRole, type AppRole } from "@/lib/auth";
+import { getAuthContext, requireOrg, requireOrgRole, type AppRole } from "@/lib/auth";
 import { refreshCityCatalog } from "@/lib/shipping/cities";
+import { sendOrgDigest } from "@/lib/digest/send";
 import {
   CURRENCY_VALUES,
   LOCALE_VALUES,
@@ -257,4 +258,42 @@ export async function refreshCityCatalogAction(): Promise<{
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "Échec" };
   }
+}
+
+// ── Daily digest ─────────────────────────────────────────────────────────────
+
+/** Send this org's previous-day digest to the caller's own email (owner/admin). */
+export async function sendTestDigestAction(): Promise<ActionResult> {
+  const { orgId, userId } = await requireOrgRole("admin");
+  const user = await db.user.findUnique({
+    where: { id: userId! },
+    select: { email: true },
+  });
+  if (!user?.email || user.email.endsWith("@placeholder.local")) {
+    return { ok: false, message: "Aucune adresse e-mail sur votre compte." };
+  }
+  const res = await sendOrgDigest(orgId!, { testTo: user.email });
+  if (!res.configured) {
+    return {
+      ok: false,
+      message: "E-mail non configuré (RESEND_API_KEY + domaine vérifié requis).",
+    };
+  }
+  if (res.sent === 0) {
+    return { ok: false, message: "Échec de l'envoi (voir le journal e-mail)." };
+  }
+  return { ok: true, message: `Test envoyé à ${user.email}.` };
+}
+
+/** Toggle the current user's daily-digest opt-in for the active org. */
+export async function setDigestOptInAction(optIn: boolean): Promise<ActionResult> {
+  const { orgId, userId } = await getAuthContext();
+  if (!orgId || !userId) return { ok: false, message: "Non autorisé." };
+  await requireOrg();
+  await getOrgDb(orgId).membership.update({
+    where: { orgId_userId: { orgId, userId } },
+    data: { digestOptIn: optIn },
+  });
+  revalidatePath("/settings/organization");
+  return { ok: true };
 }

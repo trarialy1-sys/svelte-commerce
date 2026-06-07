@@ -49,3 +49,15 @@ export function dayInTz(timeZone: string, daysAgo = 0, now: Date = new Date()): 
     day: "2-digit",
   }).format(d);
 }
+
+/** UTC instant of the start (local midnight) of the day `daysAgo` back in `timeZone`. */
+export function startOfLocalDayUTC(
+  timeZone: string,
+  daysAgo = 0,
+  now: Date = new Date()
+): Date {
+  const dateStr = dayInTz(timeZone, daysAgo, now);
+  const guess = new Date(`${dateStr}T00:00:00Z`);
+  const off = tzOffsetMinutes(timeZone, guess);
+  return new Date(guess.getTime() - off * 60_000);
+}

@@ -1,9 +1,11 @@
 import { MapPin } from "lucide-react";
 
 import { getAuthContext, meetsOrgRole } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { db, getOrgDb } from "@/lib/db";
 import { getOrgSettings } from "@/lib/org/settings";
+import { emailConfigured } from "@/lib/email/resend";
 import { PageHeader } from "@/components/page-header";
+import { DigestCard } from "./digest-card";
 import {
   Card,
   CardContent,
@@ -21,8 +23,17 @@ export default async function OrganizationSettingsPage() {
   const canEdit = meetsOrgRole(appRole, "admin");
   const isAdmin = canEdit;
 
+  const { userId } = await getAuthContext();
   const settings = orgId ? await getOrgSettings(orgId) : null;
   const cityCount = isAdmin ? await db.cityCatalog.count() : 0;
+
+  const membership =
+    isAdmin && orgId && userId
+      ? await getOrgDb(orgId).membership.findUnique({
+          where: { orgId_userId: { orgId, userId } },
+          select: { digestOptIn: true },
+        })
+      : null;
 
   return (
     <>
@@ -68,6 +79,13 @@ export default async function OrganizationSettingsPage() {
             <CityCatalogButton />
           </CardContent>
         </Card>
+      ) : null}
+
+      {isAdmin ? (
+        <DigestCard
+          optIn={membership?.digestOptIn ?? true}
+          emailConfigured={emailConfigured()}
+        />
       ) : null}
     </>
   );

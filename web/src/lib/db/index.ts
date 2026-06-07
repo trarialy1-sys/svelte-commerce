@@ -25,6 +25,7 @@ const TENANT_MODELS = new Set<string>([
   "FinanceSettings",
   "Remittance",
   "AuditLog",
+  "EmailLog",
 ]);
 
 type AnyArgs = {

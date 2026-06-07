@@ -92,6 +92,7 @@ model Organization {
   auditLogs           AuditLog[]
   customerNotes       CustomerNote[]
   remittances         Remittance[]
+  emailLogs           EmailLog[]
 }
 
 model User {
@@ -111,11 +112,25 @@ model Membership {
   orgId  String
   userId String
   role   Role   @default(OPERATOR)
+  digestOptIn Boolean @default(true)
   org    Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([orgId, userId])
   @@index([orgId])
+}
+
+model EmailLog {
+  id        String   @id @default(cuid())
+  orgId     String
+  to        String
+  type      String // e.g. "daily_digest"
+  status    String // "sent" | "failed" | "skipped"
+  error     String?
+  createdAt DateTime @default(now())
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, createdAt])
 }
 
 model Integration {
