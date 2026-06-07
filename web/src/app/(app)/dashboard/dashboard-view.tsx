@@ -95,7 +95,13 @@ const ATTENTION_META: Record<
   cities_unresolved: { label: "Villes à corriger avant envoi", icon: MapPin },
 };
 
-export function DashboardView({ role }: { role: AppRole | null }) {
+export function DashboardView({
+  role,
+  currency = "MAD",
+}: {
+  role: AppRole | null;
+  currency?: string;
+}) {
   const { data, isPending, isError } = useQuery<DashboardSummary>({
     queryKey: ["dashboard"],
     queryFn: async () => {
@@ -163,13 +169,16 @@ export function DashboardView({ role }: { role: AppRole | null }) {
               <>
                 <Kpi
                   label="Livré (à encaisser)"
-                  value={formatMoney(data.finance.livreAEncaisser)}
+                  value={formatMoney(data.finance.livreAEncaisser, currency)}
                   tone="green"
                 />
-                <Kpi label="En cours" value={formatMoney(data.finance.enCours)} />
+                <Kpi
+                  label="En cours"
+                  value={formatMoney(data.finance.enCours, currency)}
+                />
                 <Kpi
                   label="Retours"
-                  value={formatMoney(data.finance.retours)}
+                  value={formatMoney(data.finance.retours, currency)}
                   tone={data.finance.retours > 0 ? "red" : undefined}
                 />
               </>

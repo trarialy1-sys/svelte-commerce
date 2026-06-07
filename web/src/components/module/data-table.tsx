@@ -15,7 +15,7 @@ import {
 import { toast } from "sonner";
 
 import { meetsOrgRole, type AppRole } from "@/lib/auth/roles";
-import { formatDate, formatMoney, formatNumber } from "@/lib/format";
+import { formatDate, formatDateTime, formatMoney, formatNumber } from "@/lib/format";
 import type { Column, ListResult, ModuleConfig, Row } from "@/lib/module/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -72,6 +72,8 @@ function Cell({ column, row }: { column: Column; row: Row }) {
       return <span className="font-mono tabular-nums">{formatNumber(value as number)}</span>;
     case "date":
       return <span className="text-muted-foreground">{formatDate(value as string)}</span>;
+    case "datetime":
+      return <span className="text-muted-foreground">{formatDateTime(value as string)}</span>;
     case "badge": {
       const v = String(value ?? "");
       const tone = column.badgeMap?.[v];

@@ -1,7 +1,9 @@
 import "server-only";
 
 import { getOrgDb } from "@/lib/db";
-import { CustomerSegment, OrderStatus } from "@/generated/prisma/client";
+import { CustomerSegment, OrderStatus, Role } from "@/generated/prisma/client";
+import { meetsOrgRole, type AppRole } from "@/lib/auth/roles";
+import { auditConfig } from "@/modules/audit/config";
 import { customersConfig } from "@/modules/customers/config";
 import { catalogConfig } from "@/modules/catalog/config";
 import { stockConfig } from "@/modules/stock/config";
@@ -47,6 +49,7 @@ export const MODULE_REGISTRY: Record<string, RegistryEntry> = {
   },
   catalog: { config: catalogConfig },
   stock: { config: stockConfig },
+  audit: { config: auditConfig },
   orders: { config: ordersConfig, bulkHandlers: orderBulkHandlers() },
   orders_confirm: {
     config: ordersToConfirmConfig,
@@ -82,3 +85,14 @@ function orderBulkHandlers(): Record<string, BulkHandler> {
 export function getModule(key: string): RegistryEntry | undefined {
   return MODULE_REGISTRY[key];
 }
+
+/** Server-side RBAC gate for a module's read/export/bulk endpoints. */
+export function moduleAllowed(
+  config: ModuleConfig,
+  appRole: AppRole | null
+): boolean {
+  if (!config.minRole) return true;
+  return meetsOrgRole(appRole, config.minRole.toLowerCase() as AppRole);
+}
+
+export { Role };

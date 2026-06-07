@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { getAuthContext, meetsOrgRole, type AppRole } from "@/lib/auth";
 import { getOrgDb } from "@/lib/db";
-import { getModule } from "@/lib/module/registry";
+import { getModule, moduleAllowed } from "@/lib/module/registry";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,6 +23,9 @@ export async function POST(
   }
   if (!orgId) {
     return NextResponse.json({ error: "No active organization" }, { status: 400 });
+  }
+  if (!moduleAllowed(entry.config, appRole)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   let body: { ids?: unknown; action?: unknown };
