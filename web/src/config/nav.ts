@@ -8,6 +8,7 @@ import {
   Settings,
   ShieldCheck,
   Truck,
+  Upload,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -43,6 +44,7 @@ export const NAV: NavSection[] = [
       { label: "Stock", href: "/stock", icon: Boxes },
       { label: "Catalogue", href: "/products", icon: Package },
       { label: "Clients", href: "/customers", icon: Users },
+      { label: "Import", href: "/import", icon: Upload, minRole: "operator" },
       { label: "Finance", href: "/finance", icon: LineChart, minRole: "admin" },
     ],
   },
