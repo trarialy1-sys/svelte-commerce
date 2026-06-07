@@ -4,6 +4,7 @@ import { clerkPublishableKey } from "@/lib/clerk-env";
 // Next.js 16 renamed Middleware → Proxy (same behaviour, file is `proxy.ts`).
 // This is a convenience gate only — authoritative checks are re-run server-side
 // in each guarded route via the helpers in `@/lib/auth`.
+// (deploy: re-sync production to main HEAD after Phase 2 chunks 2.2b–2.5)
 
 const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
