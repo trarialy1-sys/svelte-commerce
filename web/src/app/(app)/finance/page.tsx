@@ -1,21 +1,86 @@
-import { LineChart } from "lucide-react";
-
 import { requireOrgRole } from "@/lib/auth";
-import { PageHeader } from "@/components/page-header";
-import { EmptyState } from "@/components/empty-state";
+import { db, getOrgDb } from "@/lib/db";
+import { getOrgSettings } from "@/lib/org/settings";
+import { resolvePeriod } from "@/lib/finance/period";
+import { getFinanceSummary } from "@/lib/finance/summary";
+import { FinanceView } from "./finance-view";
 
-export default async function FinancePage() {
-  // Admin-only module.
-  await requireOrgRole("admin");
+export const dynamic = "force-dynamic";
+
+export default async function FinancePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  // Entire Finance route is owner/admin only (redirects others).
+  const { orgId } = await requireOrgRole("admin");
+  const sp = await searchParams;
+  const str = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+
+  const { currency, timezone } = await getOrgSettings(orgId!);
+  const period = resolvePeriod(timezone, {
+    period: str(sp.period),
+    from: str(sp.from),
+    to: str(sp.to),
+  });
+
+  const odb = getOrgDb(orgId!);
+  const [summary, remittances, settings] = await Promise.all([
+    getFinanceSummary(orgId!, period),
+    odb.remittance.findMany({
+      where: { date: { gte: period.from, lte: period.to } },
+      orderBy: { date: "desc" },
+      select: {
+        id: true,
+        amount: true,
+        date: true,
+        reference: true,
+        note: true,
+        createdById: true,
+      },
+    }),
+    odb.financeSettings.findUnique({ where: { orgId: orgId! } }),
+  ]);
+
+  // Resolve "créé par" names (createdById is a Clerk id, User is global).
+  const ids = [
+    ...new Set(remittances.map((r) => r.createdById).filter((x): x is string => !!x)),
+  ];
+  const users = ids.length
+    ? await db.user.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, name: true, email: true },
+      })
+    : [];
+  const nameById = new Map(users.map((u) => [u.id, u.name || u.email || "—"]));
 
   return (
-    <>
-      <PageHeader title="Finance" subtitle="Revenus, coûts et marges." />
-      <EmptyState
-        icon={LineChart}
-        title="Bientôt — module en construction"
-        message="Le module Finance arrive dans un prochain chunk."
-      />
-    </>
+    <FinanceView
+      currency={currency}
+      period={{
+        kind: period.kind,
+        label: period.label,
+        fromStr: period.fromStr,
+        toStr: period.toStr,
+      }}
+      summary={summary}
+      remittances={remittances.map((r) => ({
+        id: r.id,
+        amount: Number(r.amount),
+        date: r.date.toISOString(),
+        reference: r.reference,
+        note: r.note,
+        createdBy: r.createdById ? nameById.get(r.createdById) ?? "—" : "—",
+      }))}
+      fees={{
+        shippingFeePerParcel: settings?.shippingFeePerParcel
+          ? Number(settings.shippingFeePerParcel)
+          : null,
+        codCommissionPct: settings?.codCommissionPct
+          ? Number(settings.codCommissionPct)
+          : null,
+        returnFee: settings?.returnFee ? Number(settings.returnFee) : null,
+      }}
+    />
   );
 }

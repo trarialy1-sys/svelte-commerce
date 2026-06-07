@@ -91,6 +91,7 @@ model Organization {
   financeSettings     FinanceSettings?
   auditLogs           AuditLog[]
   customerNotes       CustomerNote[]
+  remittances         Remittance[]
 }
 
 model User {
@@ -345,7 +346,26 @@ model FinanceSettings {
   currency            String  @default("MAD")
   defaultShippingCost Decimal @default(0) @db.Decimal(10, 2)
   returnCost          Decimal @default(0) @db.Decimal(10, 2)
+  // Optional fee fields for the *estimated* net (Finance-light, 2.2). Net stays
+  // unshown until at least one is set — hence nullable.
+  shippingFeePerParcel Decimal? @db.Decimal(10, 2)
+  codCommissionPct     Decimal? @db.Decimal(5, 2)
+  returnFee            Decimal? @db.Decimal(10, 2)
   org                 Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+}
+
+model Remittance {
+  id          String   @id @default(cuid())
+  orgId       String
+  amount      Decimal  @db.Decimal(12, 2)
+  date        DateTime
+  reference   String? // Ozon payout ref
+  note        String?
+  createdById String? // Clerk user id
+  createdAt   DateTime @default(now())
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, date])
 }
 
 model AuditLog {

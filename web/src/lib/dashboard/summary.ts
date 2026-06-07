@@ -11,14 +11,8 @@ import type { AppRole } from "@/lib/auth/roles";
 import { meetsOrgRole } from "@/lib/auth/roles";
 import { getOrgSettings } from "@/lib/org/settings";
 import { dayInTz, localMidnightUTC } from "@/lib/time";
+import { PARCEL_IN_TRANSIT, PARCEL_PROBLEM } from "@/lib/parcel-status";
 import type { DashboardSummary } from "./types";
-
-const PARCEL_IN_TRANSIT = [
-  ParcelStatus.CREE,
-  ParcelStatus.RAMASSE,
-  ParcelStatus.EN_TRANSIT,
-];
-const PARCEL_PROBLEM = [ParcelStatus.RETOURNE, ParcelStatus.REFUSE];
 
 /** Humanize an AuditLog action into a short French phrase. */
 function humanize(action: string, meta: unknown): string {

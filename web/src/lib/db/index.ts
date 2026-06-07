@@ -23,6 +23,7 @@ const TENANT_MODELS = new Set<string>([
   "CityAlias",
   "NeighAlias",
   "FinanceSettings",
+  "Remittance",
   "AuditLog",
 ]);
 
