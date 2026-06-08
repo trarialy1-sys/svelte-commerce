@@ -63,6 +63,25 @@ import {
 
 /** Columns an operator can edit inline in the grid (phone + ville). */
 const EDITABLE_COLUMNS = new Set(["phone", "cityRaw"]);
+
+/** Whole-row tint by status (and purple for out-of-stock / empty orders). */
+const STATUS_ROW_TINT: Record<string, string> = {
+  CONFIRMEE: "bg-orange-soft", // confirmée → orange
+  REPORTEE: "bg-yellow-soft", // reportée → jaune
+  ANNULEE: "bg-destructive/10", // annulée → rouge
+  DOUBLON: "bg-muted", // doublon / fausse commande → gris
+  PAS_DE_REPONSE: "bg-blue-soft",
+  INJOIGNABLE: "bg-amber-soft",
+  NUMERO_ERRONE: "bg-destructive/10",
+  HORS_ZONE: "bg-muted",
+  // NOUVELLE → no tint (default)
+};
+
+function rowTint(row: Row): string | undefined {
+  // Out of stock / no shippable item → purple, takes precedence.
+  if (Number(row.itemsCount) === 0) return "bg-violet-soft";
+  return STATUS_ROW_TINT[String(row.status)];
+}
 import type { OrderDetail } from "@/lib/orders/remake";
 
 /** Confirmation outcomes available in the per-row dropdown. */
@@ -134,6 +153,7 @@ export function OrdersView({ role }: { role: AppRole | null }) {
     renderRowActions,
     editableFields: canWrite ? EDITABLE_COLUMNS : undefined,
     onCellSave: canWrite ? onCellSave : undefined,
+    rowClassName: rowTint,
   };
 
   return (

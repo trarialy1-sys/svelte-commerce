@@ -64,6 +64,8 @@
   --blue-soft: oklch(0.95 0.03 245);
   --violet: oklch(0.55 0.18 292);
   --violet-soft: oklch(0.95 0.03 295);
+  --orange-soft: oklch(0.95 0.06 55);
+  --yellow-soft: oklch(0.96 0.06 100);
 }
 
 .dark {
@@ -117,6 +119,8 @@
   --blue-soft: oklch(0.27 0.04 245);
   --violet: oklch(0.70 0.15 293);
   --violet-soft: oklch(0.27 0.04 295);
+  --orange-soft: oklch(0.30 0.05 55);
+  --yellow-soft: oklch(0.30 0.05 100);
 }
 
 @theme inline {
@@ -163,6 +167,8 @@
   --color-blue-soft: var(--blue-soft);
   --color-violet: var(--violet);
   --color-violet-soft: var(--violet-soft);
+  --color-orange-soft: var(--orange-soft);
+  --color-yellow-soft: var(--yellow-soft);
 
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
