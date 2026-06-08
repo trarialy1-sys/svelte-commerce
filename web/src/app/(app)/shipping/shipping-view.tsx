@@ -489,6 +489,18 @@ export function ShippingView({
                 <Button
                   size="sm"
                   variant="outline"
+                  onClick={() => {
+                    const qs = selected.size > 0 ? `?ids=${[...selected].join(",")}` : "";
+                    window.open(`/api/shipping/picking${qs}`, "_blank");
+                  }}
+                >
+                  <FileText className="size-4" />
+                  Liste de prélèvement
+                  {selected.size > 0 ? ` (${selected.size})` : ""}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
                   disabled={blPending || selectedResolved.length === 0}
                   onClick={blOnly}
                 >

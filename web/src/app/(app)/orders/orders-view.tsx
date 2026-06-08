@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronDown,
+  FileText,
   Loader2,
   PackageX,
   ShoppingBag,
@@ -381,6 +382,18 @@ function OrderDetailSheet({
 
         {detail ? (
           <div className="flex flex-col gap-5 px-4 pb-4">
+            {canWrite ? (
+              <Button asChild variant="outline" size="sm" className="self-start">
+                <a
+                  href={`/api/orders/${orderId}/pdf?type=packing`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <FileText className="size-4" />
+                  Bon de préparation
+                </a>
+              </Button>
+            ) : null}
             <section className="grid grid-cols-2 gap-3 text-sm">
               <Field label="Client" value={detail.customer?.name ?? "—"} />
               <Field label="Téléphone" value={detail.phone ?? "—"} />
