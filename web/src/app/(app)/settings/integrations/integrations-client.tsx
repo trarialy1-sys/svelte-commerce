@@ -46,6 +46,28 @@ function statusLabel(status: string): string {
   return "Non connecté";
 }
 
+/** A read-only value with a label and a copy button (for the OAuth URLs). */
+function CopyField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-background mt-1 flex items-center gap-2 rounded border px-2 py-1">
+      <span className="text-muted-foreground shrink-0 font-medium">{label}</span>
+      <code className="flex-1 truncate">{value}</code>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="size-6 shrink-0"
+        onClick={() => {
+          navigator.clipboard?.writeText(value);
+          toast.success(`${label} copié`);
+        }}
+      >
+        <Copy className="size-3.5" />
+      </Button>
+    </div>
+  );
+}
+
 interface IntegrationsClientProps {
   integrations: SafeIntegration[];
   isOwner: boolean;
@@ -59,6 +81,14 @@ export function IntegrationsClient({
 }: IntegrationsClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  // App URL = the origin of the redirect URI (Shopify needs them on one host).
+  const appUrl = React.useMemo(() => {
+    try {
+      return new URL(shopifyRedirectUri).origin;
+    } catch {
+      return shopifyRedirectUri;
+    }
+  }, [shopifyRedirectUri]);
   const [openProvider, setOpenProvider] = React.useState<ProviderKey | null>(
     null
   );
@@ -314,33 +344,43 @@ export function IntegrationsClient({
 
           {openProvider === "SHOPIFY" ? (
             <div className="flex flex-col gap-4">
-              <div className="bg-muted/50 text-muted-foreground space-y-1 rounded-md border p-3 text-xs">
+              <div className="bg-muted/50 text-muted-foreground space-y-2 rounded-md border p-3 text-xs">
                 <p className="text-foreground font-medium">
-                  Dans votre app Shopify (Dev Dashboard) :
+                  Dans votre app Shopify (Dev Dashboard → Configuration) :
                 </p>
-                <p>
-                  1. Ajoutez cette <strong>Redirect URL</strong> à l&apos;app,
-                  puis copiez le Client ID + secret ci-dessous.
-                </p>
-                <div className="bg-background mt-1 flex items-center gap-2 rounded border px-2 py-1">
-                  <code className="flex-1 truncate">{shopifyRedirectUri}</code>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-6"
-                    onClick={() => {
-                      navigator.clipboard?.writeText(shopifyRedirectUri);
-                      toast.success("Redirect URL copiée");
-                    }}
-                  >
-                    <Copy className="size-3.5" />
-                  </Button>
-                </div>
-                <p>
-                  2. Scopes requis :{" "}
-                  <code>read_orders, read_products, read_locations, read_inventory, write_inventory, write_products</code>
-                </p>
+                <ol className="ml-4 list-decimal space-y-2">
+                  <li>
+                    <span className="text-foreground font-medium">
+                      App URL
+                    </span>{" "}
+                    et{" "}
+                    <span className="text-foreground font-medium">
+                      Redirect URL
+                    </span>{" "}
+                    doivent avoir le même hôte — collez exactement ceci :
+                    <CopyField label="App URL" value={appUrl} />
+                    <CopyField label="Redirect" value={shopifyRedirectUri} />
+                  </li>
+                  <li>
+                    <span className="text-foreground font-medium">Scopes</span>{" "}
+                    :{" "}
+                    <code className="break-all">
+                      read_orders, read_products, read_locations,
+                      read_inventory, write_inventory, write_products
+                    </code>
+                  </li>
+                  <li>
+                    Copiez le{" "}
+                    <span className="text-foreground font-medium">
+                      Client ID
+                    </span>{" "}
+                    +{" "}
+                    <span className="text-foreground font-medium">
+                      Client secret
+                    </span>{" "}
+                    (shpss_…) ci-dessous. Pas besoin d&apos;un jeton « shpat_ ».
+                  </li>
+                </ol>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="shopDomain">Domaine de la boutique</Label>
