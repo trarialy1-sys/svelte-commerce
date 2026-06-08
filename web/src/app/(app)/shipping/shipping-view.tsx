@@ -13,6 +13,7 @@ import {
   RotateCcw,
   Search,
   Send,
+  Trash2,
   TriangleAlert,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -31,6 +32,7 @@ import type { BLResult } from "@/lib/shipping/bl";
 import {
   buildBLOnlyAction,
   createDeliveryNoteAction,
+  deleteOrdersAction,
   retryOneAction,
   saveCityPickAction,
   saveCityPicksAction,
@@ -176,6 +178,7 @@ export function ShippingView({
 }) {
   const router = useRouter();
   const canWrite = meetsOrgRole(role, "operator");
+  const canDelete = meetsOrgRole(role, "admin");
 
   const [picks, setPicks] = React.useState<Record<string, CityRow>>({});
   const [busy, setBusy] = React.useState(false);
@@ -188,6 +191,7 @@ export function ShippingView({
   const [bl, setBl] = React.useState<BLResult | null>(null);
   const [blPending, setBlPending] = React.useState(false);
   const [syncing, setSyncing] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
 
   async function onSyncStatuses() {
     setSyncing(true);
@@ -303,6 +307,28 @@ export function ShippingView({
       } else toast.error(r.message);
     } finally {
       setSending(false);
+    }
+  }
+
+  async function removeSelected() {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    if (
+      !window.confirm(
+        `Supprimer définitivement ${ids.length} commande(s) ? Les articles et le colis associés seront aussi supprimés. Action irréversible.`
+      )
+    )
+      return;
+    setDeleting(true);
+    try {
+      const r = await deleteOrdersAction(ids);
+      if (r.ok) {
+        toast.success(`${r.data.deleted} commande(s) supprimée(s)`);
+        setSelected(new Set());
+        router.refresh();
+      } else toast.error(r.message);
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -486,6 +512,21 @@ export function ShippingView({
                 </Button>
               </div>
               <div className="ml-auto flex items-center gap-2">
+                {canDelete && selected.size > 0 ? (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    disabled={deleting}
+                    onClick={removeSelected}
+                  >
+                    {deleting ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="size-4" />
+                    )}
+                    Supprimer ({selected.size})
+                  </Button>
+                ) : null}
                 <Button
                   size="sm"
                   variant="outline"
