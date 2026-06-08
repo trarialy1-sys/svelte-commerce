@@ -15,7 +15,6 @@ interface OrderNode {
   name: string;
   createdAt: string;
   totalPriceSet: { shopMoney: { amount: string } };
-  customer: { firstName: string | null; lastName: string | null } | null;
   shippingAddress: {
     name: string | null;
     phone: string | null;
@@ -38,7 +37,6 @@ query Orders($cursor: String) {
     nodes {
       id name createdAt
       totalPriceSet { shopMoney { amount } }
-      customer { firstName lastName }
       shippingAddress { name phone address1 city }
       lineItems(first: 50) {
         nodes { sku quantity originalUnitPriceSet { shopMoney { amount } } }
@@ -110,12 +108,9 @@ export async function importShopifyOrders(
           continue;
         }
 
-        const name =
-          o.shippingAddress?.name ||
-          [o.customer?.firstName, o.customer?.lastName]
-            .filter(Boolean)
-            .join(" ") ||
-          "Client";
+        // Recipient name from the shipping address (reading the `customer`
+        // object would require the separate read_customers scope).
+        const name = o.shippingAddress?.name || "Client";
         const phone = (o.shippingAddress?.phone ?? "").replace(/\s/g, "");
         const cityRaw = o.shippingAddress?.city ?? "";
         const address = o.shippingAddress?.address1 ?? "";
