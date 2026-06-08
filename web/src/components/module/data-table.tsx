@@ -136,6 +136,8 @@ interface DataTableProps {
   onRowClick?: (row: Row) => void;
   /** Per-row controls rendered in a trailing actions column. */
   renderRowActions?: (row: Row) => React.ReactNode;
+  /** Compact, spreadsheet-style rows (tighter padding, smaller text). */
+  dense?: boolean;
 }
 
 export function DataTable({
@@ -144,6 +146,7 @@ export function DataTable({
   renderBulkExtra,
   onRowClick,
   renderRowActions,
+  dense,
 }: DataTableProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -446,7 +449,10 @@ export function DataTable({
               {config.columns.map((col) => (
                 <TableHead
                   key={col.key}
-                  className={col.align === "right" ? "text-right" : undefined}
+                  className={cn(
+                    dense && "h-9 text-xs",
+                    col.align === "right" && "text-right"
+                  )}
                 >
                   {col.sortable ? (
                     <button
@@ -538,7 +544,10 @@ export function DataTable({
                     {config.columns.map((col) => (
                       <TableCell
                         key={col.key}
-                        className={col.align === "right" ? "text-right" : undefined}
+                        className={cn(
+                          dense && "py-1.5 text-xs",
+                          col.align === "right" && "text-right"
+                        )}
                       >
                         <Cell column={col} row={row} />
                       </TableCell>

@@ -41,7 +41,7 @@ export async function importExcelAction(
 
 /** Pull recent orders from the connected Shopify store. */
 export async function importShopifyAction(
-  limit = 50
+  limit = 250
 ): Promise<Result<{ created: number; skipped: number }>> {
   const { orgId } = await requireOrgRole("operator");
   try {

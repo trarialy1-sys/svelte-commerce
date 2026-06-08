@@ -111,6 +111,7 @@ export function OrdersView({ role }: { role: AppRole | null }) {
 
   const tableProps = {
     role,
+    dense: true,
     onRowClick: (row: Row) => setDetailId(String(row.id)),
     renderRowActions,
   };
@@ -257,7 +258,7 @@ function ImportBar({ onDone }: { onDone: () => void }) {
   async function importShopify() {
     setPending("shopify");
     try {
-      const r = await importShopifyAction(50);
+      const r = await importShopifyAction();
       if (r.ok) {
         toast.success(
           `${r.data.created} importée(s), ${r.data.skipped} ignorée(s)`
