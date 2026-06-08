@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getCredentials } from "@/lib/integrations/vault";
+import { logError } from "@/lib/observability/logger";
 import { SHOPIFY_API_VERSION, normalizeShopDomain } from "./index";
 
 interface GraphQLError {
@@ -64,14 +65,22 @@ export async function getShopifyClient(orgId: string): Promise<ShopifyClient> {
         continue;
       }
       if (json.errors?.length) {
-        throw new Error(
+        const err = new Error(
           `Shopify GraphQL: ${json.errors.map((e) => e.message).join("; ")}`
         );
+        logError(err.message, err, { provider: "shopify", orgId, route: "graphql" });
+        throw err;
       }
-      if (!json.data) throw new Error("Shopify GraphQL: réponse vide.");
+      if (!json.data) {
+        const err = new Error("Shopify GraphQL: réponse vide.");
+        logError(err.message, err, { provider: "shopify", orgId, route: "graphql" });
+        throw err;
+      }
       return json.data;
     }
-    throw new Error("Shopify GraphQL: limite de débit atteinte, réessayez.");
+    const err = new Error("Shopify GraphQL: limite de débit atteinte, réessayez.");
+    logError(err.message, err, { provider: "shopify", orgId, route: "graphql" });
+    throw err;
   }
 
   return { gql, shopDomain, apiVersion };

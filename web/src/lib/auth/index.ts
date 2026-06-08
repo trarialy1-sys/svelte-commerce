@@ -3,6 +3,7 @@ import { auth, currentUser, clerkClient } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { Role } from "@/generated/prisma/client";
 import { db, withOrg } from "@/lib/db";
+import { setSentryContext } from "@/lib/observability/context";
 import { ROLE_RANK, meetsOrgRole, type AppRole } from "./roles";
 
 /**
@@ -151,6 +152,9 @@ export const getAuthContext = cache(async (): Promise<AuthContext> => {
   if (!role) {
     role = await jitProvision(userId, orgId, orgRole);
   }
+
+  // Observability: attach orgId/userId (only) to the Sentry scope for this req.
+  setSentryContext({ orgId, userId });
 
   return {
     userId,
