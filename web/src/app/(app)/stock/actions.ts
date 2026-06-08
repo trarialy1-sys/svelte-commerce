@@ -32,6 +32,33 @@ export async function setStockAction(
   }
 }
 
+export async function deleteVariantsAction(
+  variantIds: string[]
+): Promise<{ ok: boolean; deleted?: number; message?: string }> {
+  // Deleting catalogue rows is destructive — admin/owner only.
+  const { orgId, userId } = await requireOrgRole("admin");
+  if (variantIds.length === 0) return { ok: false, message: "Aucune sélection" };
+  try {
+    const r = await getOrgDb(orgId!).variant.deleteMany({
+      where: { id: { in: variantIds } },
+    });
+    await getOrgDb(orgId!).auditLog.create({
+      data: {
+        orgId: orgId!,
+        actorUserId: userId,
+        action: "stock.deleted",
+        entity: "Variant",
+        meta: { variantIds, deleted: r.count },
+      },
+    });
+    revalidatePath("/stock");
+    revalidatePath("/products");
+    return { ok: true, deleted: r.count };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Échec" };
+  }
+}
+
 export async function scanImageAction(
   imageBase64: string,
   mediaType: string
