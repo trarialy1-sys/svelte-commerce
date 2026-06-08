@@ -178,7 +178,7 @@ export function ShippingView({
 }) {
   const router = useRouter();
   const canWrite = meetsOrgRole(role, "operator");
-  const canDelete = meetsOrgRole(role, "admin");
+  const canDelete = meetsOrgRole(role, "operator");
 
   const [picks, setPicks] = React.useState<Record<string, CityRow>>({});
   const [busy, setBusy] = React.useState(false);

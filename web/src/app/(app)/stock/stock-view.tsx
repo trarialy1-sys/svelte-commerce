@@ -183,7 +183,7 @@ function StockBulkBar({
 export function StockView({ role }: { role: AppRole | null }) {
   const canWrite = meetsOrgRole(role, "operator");
   const canImport = meetsOrgRole(role, "admin");
-  const canDelete = meetsOrgRole(role, "admin");
+  const canDelete = meetsOrgRole(role, "operator");
   return (
     <ModulePage
       config={stockConfig}

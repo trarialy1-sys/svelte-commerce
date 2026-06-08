@@ -137,13 +137,13 @@ export async function createDeliveryNoteAction(
 }
 
 /**
- * Hard-delete the selected orders (admin only). Items and any parcel cascade
+ * Hard-delete the selected orders (operator+). Items and any parcel cascade
  * (onDelete: Cascade). Use for test/duplicate rows you don't want to ship.
  */
 export async function deleteOrdersAction(
   orderIds: string[]
 ): Promise<Result<{ deleted: number }>> {
-  const { orgId } = await requireOrgRole("admin");
+  const { orgId } = await requireOrgRole("operator");
   const ids = orderIds.filter((id) => typeof id === "string" && id);
   if (ids.length === 0) return { ok: false, message: "Aucune commande sélectionnée." };
   try {

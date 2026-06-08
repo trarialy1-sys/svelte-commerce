@@ -134,7 +134,7 @@ function makeOrdersConfig(
     // actions). Deleting an order cascades to its items and parcel.
     bulkActions: [
       ...(opts.bulkActions ?? []),
-      { key: "delete", label: "Supprimer", minRole: "ADMIN", destructive: true },
+      { key: "delete", label: "Supprimer", minRole: "OPERATOR", destructive: true },
     ],
   };
 }

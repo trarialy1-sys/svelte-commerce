@@ -77,7 +77,7 @@ export const customersConfig: ModuleConfig = {
   filters: FILTERS,
   defaultSort: { field: "lastOrderAt", dir: "desc" },
   bulkActions: [
-    { key: "delete", label: "Supprimer", minRole: "ADMIN", destructive: true },
+    { key: "delete", label: "Supprimer", minRole: "OPERATOR", destructive: true },
   ],
   exportColumns: EXPORT_COLUMNS,
 };
