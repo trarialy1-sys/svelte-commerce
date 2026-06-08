@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { requireOrgRole } from "@/lib/auth";
+import { getOrgDb } from "@/lib/db";
 import { OrderStatus } from "@/generated/prisma/client";
 import { importExcel } from "@/lib/orders/import-excel";
 import { importShopifyOrders } from "@/lib/orders/import-shopify";
@@ -34,6 +35,32 @@ export async function importExcelAction(
     const res = await importExcel(orgId!, buf);
     revalidatePath("/orders");
     return { ok: true, data: res };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Order fields an operator may edit inline from the Commandes grid. */
+const EDITABLE_ORDER_FIELDS = new Set(["phone", "cityRaw", "address"]);
+
+/** Inline-edit a single order field (operator+). */
+export async function updateOrderFieldAction(
+  orderId: string,
+  field: string,
+  value: string
+): Promise<Result<null>> {
+  const { orgId } = await requireOrgRole("operator");
+  if (!EDITABLE_ORDER_FIELDS.has(field)) {
+    return { ok: false, message: "Champ non éditable." };
+  }
+  try {
+    await getOrgDb(orgId!).order.update({
+      where: { id: orderId },
+      data: { [field]: value.trim() || null },
+    });
+    revalidatePath("/orders");
+    revalidatePath("/shipping");
+    return { ok: true, data: null };
   } catch (e) {
     return fail(e);
   }

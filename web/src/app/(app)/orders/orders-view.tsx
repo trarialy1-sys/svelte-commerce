@@ -58,7 +58,11 @@ import {
   removeItemAction,
   removeOosAction,
   setStatusAction,
+  updateOrderFieldAction,
 } from "./actions";
+
+/** Columns an operator can edit inline in the grid (phone + ville). */
+const EDITABLE_COLUMNS = new Set(["phone", "cityRaw"]);
 import type { OrderDetail } from "@/lib/orders/remake";
 
 /** Confirmation outcomes available in the per-row dropdown. */
@@ -109,11 +113,27 @@ export function OrdersView({ role }: { role: AppRole | null }) {
       )
     : undefined;
 
+  const onCellSave = React.useCallback(
+    async (rowId: string, field: string, value: string): Promise<boolean> => {
+      const r = await updateOrderFieldAction(rowId, field, value);
+      if (r.ok) {
+        toast.success("Commande mise à jour");
+        refreshAll();
+        return true;
+      }
+      toast.error(r.message);
+      return false;
+    },
+    [refreshAll]
+  );
+
   const tableProps = {
     role,
     dense: true,
     onRowClick: (row: Row) => setDetailId(String(row.id)),
     renderRowActions,
+    editableFields: canWrite ? EDITABLE_COLUMNS : undefined,
+    onCellSave: canWrite ? onCellSave : undefined,
   };
 
   return (
