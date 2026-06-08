@@ -136,6 +136,29 @@ export async function createDeliveryNoteAction(
   }
 }
 
+/**
+ * Hard-delete the selected orders (operator+). Items and any parcel cascade
+ * (onDelete: Cascade). Use for test/duplicate rows you don't want to ship.
+ */
+export async function deleteOrdersAction(
+  orderIds: string[]
+): Promise<Result<{ deleted: number }>> {
+  const { orgId } = await requireOrgRole("operator");
+  const ids = orderIds.filter((id) => typeof id === "string" && id);
+  if (ids.length === 0) return { ok: false, message: "Aucune commande sélectionnée." };
+  try {
+    const res = await getOrgDb(orgId!).order.deleteMany({
+      where: { id: { in: ids } },
+    });
+    revalidatePath("/shipping");
+    revalidatePath("/orders");
+    revalidatePath("/dashboard");
+    return { ok: true, data: { deleted: res.count } };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Échec" };
+  }
+}
+
 /** ⚠️ LIVE: BL-only path for codes whose parcels already exist at Ozon. */
 export async function buildBLOnlyAction(
   codes: string[]

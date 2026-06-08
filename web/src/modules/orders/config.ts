@@ -130,7 +130,12 @@ function makeOrdersConfig(
     exportColumns: EXPORT_COLUMNS,
     include: INCLUDE,
     ...(opts.baseWhere ? { baseWhere: opts.baseWhere } : {}),
-    ...(opts.bulkActions ? { bulkActions: opts.bulkActions } : {}),
+    // Every Orders tab gets an admin-only "Supprimer" (after any tab-specific
+    // actions). Deleting an order cascades to its items and parcel.
+    bulkActions: [
+      ...(opts.bulkActions ?? []),
+      { key: "delete", label: "Supprimer", minRole: "OPERATOR", destructive: true },
+    ],
   };
 }
 

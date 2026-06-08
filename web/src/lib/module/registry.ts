@@ -105,6 +105,14 @@ function orderBulkHandlers(): Record<string, BulkHandler> {
       });
       return { updated: res.count };
     },
+    // Hard delete (admin-gated via the config's bulkAction.minRole). Order items
+    // and the parcel cascade (onDelete: Cascade in the schema).
+    delete: async (orgId, ids) => {
+      const res = await getOrgDb(orgId).order.deleteMany({
+        where: { id: { in: ids } },
+      });
+      return { updated: res.count };
+    },
   };
 }
 

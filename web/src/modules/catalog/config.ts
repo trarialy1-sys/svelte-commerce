@@ -39,7 +39,7 @@ export const catalogConfig: ModuleConfig = {
   ],
   defaultSort: { field: "sku", dir: "asc" },
   bulkActions: [
-    { key: "delete", label: "Supprimer", minRole: "ADMIN", destructive: true },
+    { key: "delete", label: "Supprimer", minRole: "OPERATOR", destructive: true },
   ],
   exportColumns: [
     { key: "sku", label: "SKU" },
