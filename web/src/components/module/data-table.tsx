@@ -20,6 +20,14 @@ import type { Column, ListResult, ModuleConfig, Row } from "@/lib/module/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { EmptyState } from "@/components/empty-state";
 import { Input } from "@/components/ui/input";
 import {
@@ -151,6 +159,10 @@ export function DataTable({
 
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [searchInput, setSearchInput] = React.useState(searchParams.get("q") ?? "");
+  // Destructive bulk actions confirm before firing.
+  const [confirmAction, setConfirmAction] = React.useState<
+    NonNullable<ModuleConfig["bulkActions"]>[number] | null
+  >(null);
 
   // Push URL updates (resets to page 1 unless told otherwise).
   const setParams = React.useCallback(
@@ -367,7 +379,9 @@ export function DataTable({
                 size="sm"
                 variant={a.destructive ? "destructive" : "default"}
                 disabled={bulkMutation.isPending}
-                onClick={() => bulkMutation.mutate(a.key)}
+                onClick={() =>
+                  a.destructive ? setConfirmAction(a) : bulkMutation.mutate(a.key)
+                }
               >
                 {bulkMutation.isPending ? (
                   <Loader2 className="size-4 animate-spin" />
@@ -381,6 +395,39 @@ export function DataTable({
           </div>
         </div>
       ) : null}
+
+      {/* Destructive-action confirmation */}
+      <Dialog
+        open={confirmAction !== null}
+        onOpenChange={(open) => !open && setConfirmAction(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{confirmAction?.label}</DialogTitle>
+            <DialogDescription>
+              {confirmAction
+                ? `${confirmAction.label} ${selected.size} élément(s) ? Cette action est irréversible.`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setConfirmAction(null)}>
+              Annuler
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={bulkMutation.isPending}
+              onClick={() => {
+                const key = confirmAction?.key;
+                setConfirmAction(null);
+                if (key) bulkMutation.mutate(key);
+              }}
+            >
+              Confirmer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Table */}
       <div className="rounded-xl border">

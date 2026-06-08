@@ -76,5 +76,8 @@ export const customersConfig: ModuleConfig = {
   searchFields: ["name", "phone", "city"],
   filters: FILTERS,
   defaultSort: { field: "lastOrderAt", dir: "desc" },
+  bulkActions: [
+    { key: "delete", label: "Supprimer", minRole: "ADMIN", destructive: true },
+  ],
   exportColumns: EXPORT_COLUMNS,
 };

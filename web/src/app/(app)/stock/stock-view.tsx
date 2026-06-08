@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, PackageX, RotateCcw } from "lucide-react";
+import { Loader2, PackageX, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { meetsOrgRole, type AppRole } from "@/lib/auth/roles";
@@ -19,14 +19,38 @@ import {
 } from "@/components/ui/dialog";
 import { stockConfig } from "@/modules/stock/config";
 import { ScanDialog } from "./scan-dialog";
-import { setStockAction } from "./actions";
+import { deleteVariantsAction, setStockAction } from "./actions";
 import { CsvImportButton } from "../products/csv-import-button";
 
-function StockBulkBar({ ids, clear }: { ids: string[]; clear: () => void }) {
+function StockBulkBar({
+  ids,
+  clear,
+  canDelete,
+}: {
+  ids: string[];
+  clear: () => void;
+  canDelete: boolean;
+}) {
   const router = useRouter();
   const [pending, setPending] = React.useState<string | null>(null);
   const [restockOpen, setRestockOpen] = React.useState(false);
+  const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [qty, setQty] = React.useState("10");
+
+  async function remove() {
+    setPending("delete");
+    try {
+      const r = await deleteVariantsAction(ids);
+      if (r.ok) {
+        toast.success(`${r.deleted} article(s) supprimé(s)`);
+        setDeleteOpen(false);
+        clear();
+        router.refresh();
+      } else toast.error(r.message ?? "Échec");
+    } finally {
+      setPending(null);
+    }
+  }
 
   async function rupture() {
     setPending("rupture");
@@ -86,6 +110,44 @@ function StockBulkBar({ ids, clear }: { ids: string[]; clear: () => void }) {
         <RotateCcw className="size-4" />
         Réapprovisionner
       </Button>
+      {canDelete ? (
+        <Button
+          size="sm"
+          variant="destructive"
+          disabled={pending !== null}
+          onClick={() => setDeleteOpen(true)}
+        >
+          <Trash2 className="size-4" />
+          Supprimer
+        </Button>
+      ) : null}
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Supprimer du catalogue</DialogTitle>
+            <DialogDescription>
+              Supprimer définitivement {ids.length} article(s) ? Les variantes
+              synchronisées depuis Shopify réapparaîtront à la prochaine synchro.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDeleteOpen(false)}>
+              Annuler
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={remove}
+              disabled={pending === "delete"}
+            >
+              {pending === "delete" ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : null}
+              Supprimer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={restockOpen} onOpenChange={setRestockOpen}>
         <DialogContent>
@@ -121,6 +183,7 @@ function StockBulkBar({ ids, clear }: { ids: string[]; clear: () => void }) {
 export function StockView({ role }: { role: AppRole | null }) {
   const canWrite = meetsOrgRole(role, "operator");
   const canImport = meetsOrgRole(role, "admin");
+  const canDelete = meetsOrgRole(role, "admin");
   return (
     <ModulePage
       config={stockConfig}
@@ -135,7 +198,9 @@ export function StockView({ role }: { role: AppRole | null }) {
       }
       renderBulkExtra={
         canWrite
-          ? (ids, clear) => <StockBulkBar ids={ids} clear={clear} />
+          ? (ids, clear) => (
+              <StockBulkBar ids={ids} clear={clear} canDelete={canDelete} />
+            )
           : undefined
       }
     />

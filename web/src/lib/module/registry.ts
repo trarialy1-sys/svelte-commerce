@@ -47,6 +47,21 @@ export interface RegistryEntry {
   ) => Promise<Row[]>;
 }
 
+/** Bulk delete for catalogue rows (variants). Order items keep their SKU
+ *  string, so deletion is referentially safe; Shopify-synced rows reappear on
+ *  the next sync. Admin-gated by the route via the config's bulkAction.minRole. */
+const deleteVariants: BulkHandler = async (orgId, ids) => {
+  const res = await getOrgDb(orgId).variant.deleteMany({ where: { id: { in: ids } } });
+  return { updated: res.count };
+};
+
+/** Bulk delete for customers. Notes cascade; orders keep their history with
+ *  customerId set null (the relation is optional). Admin-gated. */
+const deleteCustomers: BulkHandler = async (orgId, ids) => {
+  const res = await getOrgDb(orgId).customer.deleteMany({ where: { id: { in: ids } } });
+  return { updated: res.count };
+};
+
 /**
  * Tools register their config + bulk handlers here. Server-only — handlers run
  * through getOrgDb(orgId) so every write is org-scoped + RLS-protected.
@@ -56,8 +71,9 @@ export const MODULE_REGISTRY: Record<string, RegistryEntry> = {
     config: customersConfig,
     list: listCustomers,
     exportRows: exportCustomers,
+    bulkHandlers: { delete: deleteCustomers },
   },
-  catalog: { config: catalogConfig },
+  catalog: { config: catalogConfig, bulkHandlers: { delete: deleteVariants } },
   stock: { config: stockConfig },
   audit: { config: auditConfig },
   orders: { config: ordersConfig, bulkHandlers: orderBulkHandlers() },
