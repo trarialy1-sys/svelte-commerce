@@ -1,0 +1,37 @@
+name: web - Lighthouse
+
+# Chunk 3.3 Pass B: Lighthouse against budgets (lighthouserc.json).
+#
+# Manual trigger only. The app's key routes (dashboard/orders/customers/reports)
+# are auth-gated (Clerk) + DB-backed, which can't be logged into headlessly in
+# CI — those are covered by the documented LOCAL pass in docs/observability.md.
+# This job audits a deployed PUBLIC URL (default: the prod sign-in page) so the
+# budget config stays exercised and regressions on the public shell are caught.
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "Deployed URL to audit"
+        required: true
+        default: "https://svelte-commerce-rosy.vercel.app/sign-in"
+
+jobs:
+  lighthouse:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run Lighthouse CI
+        run: |
+          npm install -g @lhci/cli@0.14.x
+          lhci autorun \
+            --collect.url="${{ github.event.inputs.url }}" \
+            --collect.numberOfRuns=3
