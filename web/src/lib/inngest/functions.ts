@@ -4,6 +4,8 @@ import { db, getOrgDb } from "@/lib/db";
 import { getOrgSettings } from "@/lib/org/settings";
 import { startOfLocalDayUTC } from "@/lib/time";
 import { syncParcelStatuses } from "@/lib/shipping/status-sync";
+import { importShopifyOrders } from "@/lib/orders/import-shopify";
+import { getCredentials } from "@/lib/integrations/vault";
 import { sendOrgDigest } from "@/lib/digest/send";
 import { captureJobError } from "@/lib/observability/jobs";
 import { inngest, type AppEvents } from "./client";
@@ -72,6 +74,52 @@ const parcelSyncOrg = inngest.createFunction(
   }
 );
 
+// ── Shopify order auto-import ─────────────────────────────────────────────────
+// Scheduled every 15 min (Inngest cron — no Hobby limit). Fans out one event
+// per active org; the per-org job pulls new Shopify orders. The import is
+// idempotent (dedup by shopifyOrderId) and stops early once it reaches orders
+// already imported, so frequent runs are cheap.
+const shopifyImportSchedule = inngest.createFunction(
+  { id: "shopify-import-schedule", triggers: [{ cron: "*/15 * * * *" }] },
+  async ({ step }) => {
+    const ids = await step.run("list-active-orgs", activeOrgIds);
+    if (ids.length) {
+      await step.sendEvent(
+        "fan-out",
+        ids.map((orgId) => ({
+          name: "shopify/import.requested",
+          data: { orgId } satisfies AppEvents["shopify/import.requested"],
+        }))
+      );
+    }
+    return { orgs: ids.length };
+  }
+);
+
+const shopifyImportOrg = inngest.createFunction(
+  {
+    id: "shopify-import-org",
+    concurrency: { limit: 3 }, // respect Shopify rate limits
+    retries: 3,
+    triggers: [{ event: "shopify/import.requested" }],
+  },
+  async ({ event, step }) => {
+    const { orgId } = event.data as AppEvents["shopify/import.requested"];
+    // Skip orgs without a connected Shopify token (no error/retry noise).
+    const connected = await step.run("connected?", async () => {
+      const creds = await getCredentials(orgId, "SHOPIFY");
+      return Boolean(creds?.adminAccessToken);
+    });
+    if (!connected) return { skipped: "not-connected" as const };
+    try {
+      return await step.run("import", () => importShopifyOrders(orgId));
+    } catch (err) {
+      await captureJobError("shopify-import-org", err, orgId);
+      throw err;
+    }
+  }
+);
+
 // ── Owner daily digest ───────────────────────────────────────────────────────
 const digestSchedule = inngest.createFunction(
   // ≈ 07:30 Africa/Casablanca; the builder uses the org-tz day window.
@@ -123,6 +171,8 @@ const digestSendOrg = inngest.createFunction(
 export const functions = [
   parcelSyncSchedule,
   parcelSyncOrg,
+  shopifyImportSchedule,
+  shopifyImportOrg,
   digestSchedule,
   digestSendOrg,
 ];
