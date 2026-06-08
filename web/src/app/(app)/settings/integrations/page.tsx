@@ -1,5 +1,6 @@
 import { getAuthContext } from "@/lib/auth";
 import { getOrgDb } from "@/lib/db";
+import { shopifyRedirectUri } from "@/lib/integrations/shopify/oauth";
 import type { SafeIntegration } from "@/lib/integrations/types";
 import { IntegrationsClient } from "./integrations-client";
 
@@ -26,6 +27,7 @@ export default async function IntegrationsPage() {
     <IntegrationsClient
       integrations={integrations}
       isOwner={appRole === "owner"}
+      shopifyRedirectUri={shopifyRedirectUri()}
     />
   );
 }
