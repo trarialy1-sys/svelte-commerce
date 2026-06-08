@@ -10,6 +10,7 @@ import {
   formatPhone,
   isUsedBefore,
 } from "./ozon-helpers";
+import { missingShippingFields } from "./validate";
 
 export interface OzonClient {
   base: string;
@@ -100,6 +101,23 @@ export async function createParcelForOrder(
   const code = order.code;
   if (order.cityId == null) {
     return { orderId, code, ok: false, error: "Ville non résolue (cityId manquant)." };
+  }
+
+  // Pre-send check: fail fast with a precise message instead of letting Ozon
+  // return its generic "Some fields Empty".
+  const missing = missingShippingFields({
+    customerName: order.customer?.name,
+    phone: order.phone,
+    address: order.address,
+    price: Number(order.totalPrice),
+  });
+  if (missing.length > 0) {
+    return {
+      orderId,
+      code,
+      ok: false,
+      error: `Champs manquants : ${missing.join(", ")}.`,
+    };
   }
 
   try {
