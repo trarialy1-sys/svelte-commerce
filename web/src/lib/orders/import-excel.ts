@@ -38,10 +38,14 @@ export async function importExcel(
       skipped++;
       continue;
     }
-    const { ref, skus } = parseCodeSuivi(codeSuivi, knownSkus);
+    // The FULL code suivi is the order's tracking at Ozon — keep it whole (the
+    // part after the last "_" alone is not unique and collides). We still parse
+    // the SKU segment for the line items.
+    const code = codeSuivi.trim();
+    const { skus } = parseCodeSuivi(codeSuivi, knownSkus);
 
     const existing = await odb.order.findUnique({
-      where: { orgId_code: { orgId, code: ref } },
+      where: { orgId_code: { orgId, code } },
       select: { id: true },
     });
     if (existing) {
@@ -65,7 +69,7 @@ export async function importExcel(
     const order = await odb.order.create({
       data: {
         orgId,
-        code: ref,
+        code,
         customerId,
         cityRaw,
         address,

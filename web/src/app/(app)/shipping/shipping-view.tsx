@@ -547,7 +547,8 @@ export function ShippingView({
                       </span>
                     ) : res.usedBefore ? (
                       <span className="text-amber text-xs">
-                        Déjà existant → inclus dans le BL
+                        Déjà existant → inclus dans le BL, ou changez le code suivi
+                        ci-dessous
                       </span>
                     ) : (
                       <span className="text-destructive max-w-[60%] text-right text-xs break-words">
@@ -555,12 +556,19 @@ export function ShippingView({
                       </span>
                     )}
                   </div>
-                  {!res.ok && !res.usedBefore ? (
+                  {!res.ok ? (
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       <Input
                         className="h-8 flex-1 font-mono text-xs"
-                        placeholder="tracking (optionnel)"
-                        value={retryEdits[res.orderId] ?? ""}
+                        placeholder={
+                          res.usedBefore
+                            ? "nouveau code suivi (doit être unique chez Ozon)"
+                            : "code suivi (optionnel)"
+                        }
+                        value={
+                          retryEdits[res.orderId] ??
+                          (res.usedBefore ? res.tracking || res.code : "")
+                        }
                         onChange={(e) =>
                           setRetryEdits((p) => ({
                             ...p,
