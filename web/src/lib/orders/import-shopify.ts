@@ -47,9 +47,25 @@ query Orders($cursor: String) {
   }
 }`;
 
+/**
+ * Map a raw Shopify GraphQL error to a clear, actionable message. The most
+ * common one for orders is a missing `read_orders` scope on the custom app.
+ */
+function friendlyShopifyError(e: unknown): Error {
+  const msg = e instanceof Error ? e.message : String(e);
+  if (/access denied|read_orders|read_all_orders|not approved|scope/i.test(msg)) {
+    return new Error(
+      "L'app Shopify n'a pas la permission de lire les commandes. Ajoutez le " +
+        "scope « read_orders » à votre app Shopify, réinstallez-la, puis " +
+        "reconnectez-la dans Paramètres → Intégrations."
+    );
+  }
+  return e instanceof Error ? e : new Error(msg);
+}
+
 export async function importShopifyOrders(
   orgId: string,
-  limit = 50
+  limit = 250
 ): Promise<{ created: number; skipped: number }> {
   const { gql } = await getShopifyClient(orgId);
   const odb = getOrgDb(orgId);
@@ -60,7 +76,16 @@ export async function importShopifyOrders(
   let skipped = 0;
 
   do {
-    const resp: OrdersResp = await gql<OrdersResp>(ORDERS_QUERY, { cursor });
+    let resp: OrdersResp;
+    try {
+      resp = await gql<OrdersResp>(ORDERS_QUERY, { cursor });
+    } catch (e) {
+      throw friendlyShopifyError(e);
+    }
+    // Orders come newest-first. Track how many on this page were genuinely new
+    // so a routine re-sync can stop early once it reaches already-imported ones.
+    let newThisPage = 0;
+    const pageHadNodes = resp.orders.nodes.length > 0;
     for (const o of resp.orders.nodes) {
       if (fetched >= limit) break;
       fetched++;
@@ -122,12 +147,16 @@ export async function importShopifyOrders(
           });
         }
         created++;
+        newThisPage++;
       } catch {
         skipped++;
       }
     }
+    // Caught up: a full page of existing orders means everything newer is
+    // already imported (newest-first scan), so stop paginating.
+    const caughtUp = pageHadNodes && newThisPage === 0;
     cursor =
-      fetched < limit && resp.orders.pageInfo.hasNextPage
+      !caughtUp && fetched < limit && resp.orders.pageInfo.hasNextPage
         ? resp.orders.pageInfo.endCursor
         : null;
   } while (cursor);
