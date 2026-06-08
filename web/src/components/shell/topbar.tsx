@@ -30,7 +30,7 @@ export function Topbar({ role, isPlatformAdmin }: TopbarProps) {
 
   const clerkAppearance = {
     baseTheme: isDark ? dark : undefined,
-    variables: { colorPrimary: isDark ? "#E0764B" : "#C1542D" },
+    variables: { colorPrimary: isDark ? "#6366f1" : "#4f46e5" },
   };
 
   return (

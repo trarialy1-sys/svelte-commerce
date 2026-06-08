@@ -39,7 +39,7 @@ import {
   updateRemittanceAction,
 } from "./actions";
 
-const BRAND = "#C1542D";
+const BRAND = "var(--chart-1)";
 
 interface Remittance {
   id: string;

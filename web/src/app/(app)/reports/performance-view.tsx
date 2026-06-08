@@ -167,9 +167,9 @@ export function PerformanceView({
                 <YAxis tick={{ fontSize: 11 }} allowDecimals={false} width={36} />
                 <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Line type="monotone" dataKey="orders" name="Commandes" stroke="#C1542D" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="delivered" name="Livré" stroke="#2E7D32" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="returned" name="Retours" stroke="#B91C1C" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="orders" name="Commandes" stroke="var(--chart-1)" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="delivered" name="Livré" stroke="var(--green)" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="returned" name="Retours" stroke="var(--destructive)" strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
           </div>

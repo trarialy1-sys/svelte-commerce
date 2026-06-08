@@ -54,7 +54,7 @@ export function renderDigest(s: DigestSummary, baseUrl: string): RenderedEmail {
   const lang: Lang = s.org.locale === "en" ? "en" : "fr";
   const t = T[lang];
   const money = (n: number) => formatMoney(n, s.org.currency);
-  const brand = s.org.brandColor || "#C1542D";
+  const brand = s.org.brandColor || "#4f46e5";
   const url = (path: string) => `${baseUrl}${path}`;
 
   const subject = `${t.subject} ${s.date} · ${s.org.name}`;
