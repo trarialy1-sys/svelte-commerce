@@ -604,11 +604,13 @@ export function ShippingView({
                         placeholder={
                           res.usedBefore
                             ? "nouveau code suivi (doit être unique chez Ozon)"
-                            : "code suivi (optionnel)"
+                            : "code suivi"
                         }
+                        // Pre-fill each row with ITS OWN original code suivi so
+                        // the operator edits the real value (never a shared/empty
+                        // one) before resending.
                         value={
-                          retryEdits[res.orderId] ??
-                          (res.usedBefore ? res.tracking || res.code : "")
+                          retryEdits[res.orderId] ?? res.tracking ?? res.code
                         }
                         onChange={(e) =>
                           setRetryEdits((p) => ({
