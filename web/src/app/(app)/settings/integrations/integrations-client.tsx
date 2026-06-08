@@ -344,12 +344,13 @@ export function IntegrationsClient({
 
           {openProvider === "SHOPIFY" ? (
             <div className="flex flex-col gap-4">
-              <div className="bg-muted/50 text-muted-foreground space-y-2 rounded-md border p-3 text-xs">
+              <div className="bg-muted/50 space-y-3 rounded-md border p-3 text-xs">
                 <p className="text-foreground font-medium">
-                  Dans votre app Shopify (Dev Dashboard → Configuration) :
+                  Configuration de l&apos;app Shopify (Dev Dashboard)
                 </p>
-                <ol className="ml-4 list-decimal space-y-2">
-                  <li>
+
+                <div className="space-y-1.5">
+                  <p className="text-muted-foreground">
                     <span className="text-foreground font-medium">
                       App URL
                     </span>{" "}
@@ -357,30 +358,29 @@ export function IntegrationsClient({
                     <span className="text-foreground font-medium">
                       Redirect URL
                     </span>{" "}
-                    doivent avoir le même hôte — collez exactement ceci :
-                    <CopyField label="App URL" value={appUrl} />
-                    <CopyField label="Redirect" value={shopifyRedirectUri} />
-                  </li>
-                  <li>
-                    <span className="text-foreground font-medium">Scopes</span>{" "}
-                    :{" "}
-                    <code className="break-all">
-                      read_orders, read_products, read_locations,
-                      read_inventory, write_inventory, write_products
-                    </code>
-                  </li>
-                  <li>
-                    Copiez le{" "}
-                    <span className="text-foreground font-medium">
-                      Client ID
-                    </span>{" "}
-                    +{" "}
-                    <span className="text-foreground font-medium">
-                      Client secret
-                    </span>{" "}
-                    (shpss_…) ci-dessous. Pas besoin d&apos;un jeton « shpat_ ».
-                  </li>
-                </ol>
+                    — même hôte, à coller tels quels :
+                  </p>
+                  <CopyField label="App URL" value={appUrl} />
+                  <CopyField label="Redirect" value={shopifyRedirectUri} />
+                </div>
+
+                <p className="text-muted-foreground">
+                  <span className="text-foreground font-medium">Scopes</span> :{" "}
+                  <code className="text-foreground/80 break-all">
+                    read_orders, read_products, read_locations, read_inventory,
+                    write_inventory, write_products
+                  </code>
+                </p>
+
+                <p className="text-muted-foreground">
+                  Puis copiez le{" "}
+                  <span className="text-foreground font-medium">Client ID</span>{" "}
+                  + le{" "}
+                  <span className="text-foreground font-medium">
+                    Client secret
+                  </span>{" "}
+                  (shpss_…) ci-dessous — pas besoin de jeton « shpat_ ».
+                </p>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="shopDomain">Domaine de la boutique</Label>
