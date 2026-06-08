@@ -259,6 +259,9 @@ model Order {
   @@unique([orgId, shopifyOrderId])
   @@index([orgId, status, createdAt])
   @@index([orgId, confirmedById])
+  // Reporting (3.2): date-range cohort scans + the "Par ville" breakdown.
+  @@index([orgId, createdAt])
+  @@index([orgId, cityId])
 }
 
 model OrderItem {
@@ -273,6 +276,8 @@ model OrderItem {
 
   @@index([orgId])
   @@index([orderId])
+  // Reporting (3.2): "Par produit" groups order items by SKU.
+  @@index([orgId, sku])
 }
 
 model Parcel {
@@ -293,6 +298,8 @@ model Parcel {
   org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   @@index([orgId, status])
+  // Reporting (3.2): delivered/returned by status-transition time (updatedAt).
+  @@index([orgId, status, updatedAt])
 }
 
 model DeliveryNote {

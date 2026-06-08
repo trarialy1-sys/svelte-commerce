@@ -51,7 +51,7 @@ export const NAV: NavSection[] = [
   {
     label: "Plateforme",
     items: [
-      { label: "Rapports", href: "/reports", icon: BarChart3 },
+      { label: "Rapports", href: "/reports", icon: BarChart3, minRole: "admin" },
       { label: "Paramètres", href: "/settings", icon: Settings },
     ],
   },
