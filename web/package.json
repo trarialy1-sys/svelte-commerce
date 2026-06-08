@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -48,6 +49,8 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@clerk/testing": "^2.0.35",
+    "@playwright/test": "^1.60.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/pg": "^8.20.0",

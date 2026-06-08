@@ -1,0 +1,77 @@
+name: web - E2E (Playwright)
+
+# Chunk 3.4 Pass A: critical-journey E2E against a seeded test DB with externals
+# mocked. Booting the app needs valid Clerk keys, so this job only runs when the
+# repo variable E2E_ENABLED == 'true' AND the E2E_* secrets are configured (see
+# docs/runbooks/testing.md). The Vitest job (web-test.yml) is the always-on gate.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: ["web/**", ".github/workflows/web-e2e.yml"]
+
+jobs:
+  e2e:
+    if: ${{ vars.E2E_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: e2edb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/e2edb
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/e2edb
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.E2E_CLERK_PUBLISHABLE_KEY }}
+      CLERK_SECRET_KEY: ${{ secrets.E2E_CLERK_SECRET_KEY }}
+      ENCRYPTION_KEY: ${{ secrets.E2E_ENCRYPTION_KEY }}
+      E2E_CLERK_USER_EMAIL: ${{ secrets.E2E_CLERK_USER_EMAIL }}
+      E2E_CLERK_USER_PASSWORD: ${{ secrets.E2E_CLERK_USER_PASSWORD }}
+
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply migrations + seed the test DB
+        run: |
+          npx prisma migrate deploy
+          npx prisma db seed
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Build
+        run: npx next build
+
+      - name: Run Playwright
+        run: npx playwright test
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: web/playwright-report/
+          retention-days: 7
