@@ -163,3 +163,85 @@ export async function importShopifyOrders(
 
   return { created, skipped };
 }
+
+/** Shape of the relevant fields in an `orders/create` webhook payload (REST). */
+interface WebhookOrderPayload {
+  id?: number | string;
+  name?: string;
+  total_price?: string;
+  customer?: { first_name?: string | null; last_name?: string | null } | null;
+  shipping_address?: {
+    name?: string | null;
+    phone?: string | null;
+    address1?: string | null;
+    city?: string | null;
+  } | null;
+  line_items?: { sku?: string | null; quantity?: number; price?: string }[];
+}
+
+/**
+ * Import a single order delivered by the `orders/create` webhook. Idempotent:
+ * dedups on the same `shopifyOrderId` (gid form) used by the bulk import, so a
+ * webhook + a later poll never double-create.
+ */
+export async function importShopifyOrderWebhook(
+  orgId: string,
+  o: WebhookOrderPayload
+): Promise<{ created: boolean }> {
+  if (o.id == null) return { created: false };
+  const odb = getOrgDb(orgId);
+  // Normalize the numeric webhook id to the GraphQL gid the bulk import stores.
+  const shopifyOrderId = `gid://shopify/Order/${o.id}`;
+
+  const existing = await odb.order.findUnique({
+    where: { orgId_shopifyOrderId: { orgId, shopifyOrderId } },
+    select: { id: true },
+  });
+  if (existing) return { created: false };
+
+  const name =
+    o.shipping_address?.name ||
+    [o.customer?.first_name, o.customer?.last_name].filter(Boolean).join(" ") ||
+    "Client";
+  const phone = (o.shipping_address?.phone ?? "").replace(/\s/g, "");
+  const cityRaw = o.shipping_address?.city ?? "";
+  const address = o.shipping_address?.address1 ?? "";
+  const totalPrice = Number(o.total_price ?? "0") || 0;
+  const items = (o.line_items ?? []).filter((li) => li.sku);
+
+  const customerId = await upsertCustomerFromOrder(orgId, {
+    name,
+    phone,
+    city: cityRaw,
+  });
+
+  const order = await odb.order.create({
+    data: {
+      orgId,
+      code: o.name || shopifyOrderId,
+      shopifyOrderId,
+      customerId,
+      cityRaw,
+      address,
+      phone,
+      totalPrice,
+      itemsCount: items.length,
+      status: OrderStatus.NOUVELLE,
+      source: OrderSource.SHOPIFY,
+    },
+    select: { id: true },
+  });
+
+  for (const li of items) {
+    await odb.orderItem.create({
+      data: {
+        orgId,
+        orderId: order.id,
+        sku: li.sku as string,
+        qty: li.quantity ?? 1,
+        unitPrice: Number(li.price ?? "0") || 0,
+      },
+    });
+  }
+  return { created: true };
+}
