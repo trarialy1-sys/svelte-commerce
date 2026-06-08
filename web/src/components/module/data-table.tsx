@@ -127,6 +127,69 @@ function Cell({ column, row }: { column: Column; row: Row }) {
   }
 }
 
+/** Click-to-edit text cell: Enter/blur saves, Esc cancels. */
+function EditableCell({
+  value,
+  onSave,
+}: {
+  value: string;
+  onSave: (value: string) => Promise<boolean>;
+}) {
+  const [editing, setEditing] = React.useState(false);
+  const [draft, setDraft] = React.useState(value);
+  const [saving, setSaving] = React.useState(false);
+
+  function startEdit() {
+    setDraft(value); // seed with the latest value when entering edit mode
+    setEditing(true);
+  }
+
+  async function commit() {
+    if (draft === value) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    const ok = await onSave(draft);
+    setSaving(false);
+    if (ok) setEditing(false);
+    else setDraft(value);
+  }
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={startEdit}
+        title="Cliquer pour modifier"
+        className="hover:bg-accent hover:ring-border -mx-1 w-full truncate rounded px-1 text-left hover:ring-1"
+      >
+        <span className={cn(!value && "text-muted-foreground")}>
+          {value || "—"}
+        </span>
+      </button>
+    );
+  }
+
+  return (
+    <Input
+      autoFocus
+      value={draft}
+      disabled={saving}
+      className="h-7 px-1 text-xs"
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") commit();
+        else if (e.key === "Escape") {
+          setDraft(value);
+          setEditing(false);
+        }
+      }}
+    />
+  );
+}
+
 interface DataTableProps {
   config: ModuleConfig;
   role: AppRole | null;
@@ -138,6 +201,10 @@ interface DataTableProps {
   renderRowActions?: (row: Row) => React.ReactNode;
   /** Compact, spreadsheet-style rows (tighter padding, smaller text). */
   dense?: boolean;
+  /** Column keys editable inline (operator+). Requires onCellSave. */
+  editableFields?: Set<string>;
+  /** Persist an inline edit; return true on success. */
+  onCellSave?: (rowId: string, field: string, value: string) => Promise<boolean>;
 }
 
 export function DataTable({
@@ -147,6 +214,8 @@ export function DataTable({
   onRowClick,
   renderRowActions,
   dense,
+  editableFields,
+  onCellSave,
 }: DataTableProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -541,17 +610,31 @@ export function DataTable({
                         />
                       </TableCell>
                     ) : null}
-                    {config.columns.map((col) => (
-                      <TableCell
-                        key={col.key}
-                        className={cn(
-                          dense && "py-1.5 text-xs",
-                          col.align === "right" && "text-right"
-                        )}
-                      >
-                        <Cell column={col} row={row} />
-                      </TableCell>
-                    ))}
+                    {config.columns.map((col) => {
+                      const editable =
+                        editableFields?.has(col.key) && Boolean(onCellSave);
+                      return (
+                        <TableCell
+                          key={col.key}
+                          className={cn(
+                            dense && "py-1.5 text-xs",
+                            col.align === "right" && "text-right"
+                          )}
+                          onClick={
+                            editable ? (e) => e.stopPropagation() : undefined
+                          }
+                        >
+                          {editable ? (
+                            <EditableCell
+                              value={String(row[col.key] ?? "")}
+                              onSave={(v) => onCellSave!(id, col.key, v)}
+                            />
+                          ) : (
+                            <Cell column={col} row={row} />
+                          )}
+                        </TableCell>
+                      );
+                    })}
                     {renderRowActions ? (
                       <TableCell
                         className="text-right"
