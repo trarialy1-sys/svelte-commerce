@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
-const BRAND = "#C1542D";
+const BRAND = "var(--chart-1)";
 
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();

@@ -9,7 +9,7 @@ export function NoOrgScreen() {
   const { resolvedTheme } = useTheme();
   const appearance = {
     baseTheme: resolvedTheme === "dark" ? dark : undefined,
-    variables: { colorPrimary: resolvedTheme === "dark" ? "#E0764B" : "#C1542D" },
+    variables: { colorPrimary: resolvedTheme === "dark" ? "#6366f1" : "#4f46e5" },
   };
 
   return (

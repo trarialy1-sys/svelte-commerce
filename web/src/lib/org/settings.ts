@@ -18,7 +18,7 @@ const DEFAULTS = {
   locale: "fr",
   timezone: "Africa/Casablanca",
   currency: "MAD",
-  brandColor: "#C1542D",
+  brandColor: "#4f46e5",
 };
 
 /**

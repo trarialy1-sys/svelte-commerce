@@ -26,7 +26,7 @@ the repo root still holds a separate, unrelated SvelteKit project.
 - **Clerk** auth (+ Organizations), **Inngest** jobs, **Resend** email,
   **Sentry** + Vercel Speed Insights observability
 - Fonts: **Plus Jakarta Sans** (UI) + **JetBrains Mono** (numbers/code) via `next/font/google`
-- Brand: terracotta `#C1542D` primary on warm off-white `#FAF8F5`, radius `0.6rem`, light + dark
+- Brand: **ODES** — indigo primary on slate neutrals, radius `0.5rem`, light + dark
 
 ## Local development
 
