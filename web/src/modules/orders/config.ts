@@ -116,6 +116,7 @@ function makeOrdersConfig(
     subtitle?: string;
     baseWhere?: Record<string, unknown>;
     bulkActions?: ModuleConfig["bulkActions"];
+    defaultSort?: { field: string; dir: "asc" | "desc" };
   } = {}
 ): ModuleConfig {
   return {
@@ -126,7 +127,7 @@ function makeOrdersConfig(
     columns: COLUMNS,
     searchFields: ["code", "phone", "cityRaw"],
     filters: FILTERS,
-    defaultSort: { field: "createdAt", dir: "desc" },
+    defaultSort: opts.defaultSort ?? { field: "createdAt", dir: "desc" },
     exportColumns: EXPORT_COLUMNS,
     include: INCLUDE,
     ...(opts.baseWhere ? { baseWhere: opts.baseWhere } : {}),
@@ -165,10 +166,25 @@ export const ordersToConfirmConfig = makeOrdersConfig(
   }
 );
 
-/** "Prêtes" — confirmed orders not yet shipped (no parcel). */
-export const ordersReadyConfig = makeOrdersConfig("orders_ready", "Prêtes", {
-  subtitle: "Commandes confirmées, prêtes à expédier.",
-  baseWhere: { status: "CONFIRMEE", parcel: { is: null } },
-});
+/** "Confirmées" — confirmed orders, grouped by confirmation day in the UI. */
+export const ordersConfirmedConfig = makeOrdersConfig(
+  "orders_confirmed",
+  "Confirmées",
+  {
+    subtitle: "Commandes confirmées, groupées par jour de confirmation.",
+    baseWhere: { status: "CONFIRMEE" },
+    defaultSort: { field: "confirmedAt", dir: "desc" },
+  }
+);
+
+/** "Prêt à expédier" — confirmed orders not yet shipped (no parcel). */
+export const ordersReadyConfig = makeOrdersConfig(
+  "orders_ready",
+  "Prêt à expédier",
+  {
+    subtitle: "Commandes confirmées, prêtes à expédier.",
+    baseWhere: { status: "CONFIRMEE", parcel: { is: null } },
+  }
+);
 
 export { STATUS_LABELS, STATUS_TONES, SOURCE_LABELS };

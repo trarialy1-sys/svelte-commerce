@@ -47,6 +47,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ordersConfig,
+  ordersConfirmedConfig,
   ordersReadyConfig,
   ordersToConfirmConfig,
   STATUS_LABELS,
@@ -82,6 +83,24 @@ function rowTint(row: Row): string | undefined {
   if (Number(row.itemsCount) === 0) return "bg-violet-soft";
   return STATUS_ROW_TINT[String(row.status)];
 }
+
+const DAY_FMT = new Intl.DateTimeFormat("fr-FR", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+});
+
+/** Group the Confirmées rows by their confirmation day (local). */
+function confirmedDayGroup(row: Row): { key: string; label: string } | null {
+  const raw = row.confirmedAt ?? row.createdAt;
+  if (!raw) return { key: "—", label: "Sans date" };
+  const d = new Date(String(raw));
+  if (Number.isNaN(d.getTime())) return { key: "—", label: "Sans date" };
+  const key = d.toISOString().slice(0, 10);
+  const label = DAY_FMT.format(d);
+  return { key, label: label.charAt(0).toUpperCase() + label.slice(1) };
+}
 import type { OrderDetail } from "@/lib/orders/remake";
 
 /** Confirmation outcomes available in the per-row dropdown. */
@@ -103,7 +122,12 @@ export function OrdersView({ role }: { role: AppRole | null }) {
   const [reportFor, setReportFor] = React.useState<string | null>(null);
 
   const refreshAll = React.useCallback(() => {
-    for (const key of ["orders", "orders_confirm", "orders_ready"]) {
+    for (const key of [
+      "orders",
+      "orders_confirm",
+      "orders_confirmed",
+      "orders_ready",
+    ]) {
       queryClient.invalidateQueries({ queryKey: [key] });
     }
   }, [queryClient]);
@@ -164,20 +188,28 @@ export function OrdersView({ role }: { role: AppRole | null }) {
         actions={canWrite ? <ImportBar onDone={refreshAll} /> : null}
       />
 
-      <Tabs defaultValue="confirm">
+      <Tabs defaultValue="all">
         <TabsList>
-          <TabsTrigger value="confirm">À confirmer</TabsTrigger>
-          <TabsTrigger value="ready">Prêtes</TabsTrigger>
           <TabsTrigger value="all">Toutes</TabsTrigger>
+          <TabsTrigger value="confirm">À confirmer</TabsTrigger>
+          <TabsTrigger value="confirmed">Confirmées</TabsTrigger>
+          <TabsTrigger value="ready">Prêt à expédier</TabsTrigger>
         </TabsList>
+        <TabsContent value="all">
+          <DataTable config={ordersConfig} {...tableProps} />
+        </TabsContent>
         <TabsContent value="confirm">
           <DataTable config={ordersToConfirmConfig} {...tableProps} />
         </TabsContent>
+        <TabsContent value="confirmed">
+          <DataTable
+            config={ordersConfirmedConfig}
+            {...tableProps}
+            groupBy={confirmedDayGroup}
+          />
+        </TabsContent>
         <TabsContent value="ready">
           <DataTable config={ordersReadyConfig} {...tableProps} />
-        </TabsContent>
-        <TabsContent value="all">
-          <DataTable config={ordersConfig} {...tableProps} />
         </TabsContent>
       </Tabs>
 
