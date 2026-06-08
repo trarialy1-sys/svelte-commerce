@@ -3,6 +3,7 @@ import "server-only";
 import { ParcelStatus } from "@/generated/prisma/client";
 import { getOrgDb } from "@/lib/db";
 import { getCredentials } from "@/lib/integrations/vault";
+import { logError } from "@/lib/observability/logger";
 import {
   deepFindKey,
   errMsg,
@@ -24,16 +25,31 @@ export async function getOzonClient(orgId: string): Promise<OzonClient> {
   const base = `https://api.ozonexpress.ma/customers/${creds.customerId}/${creds.apiKey}`;
 
   async function post(path: string, fd: FormData): Promise<unknown> {
-    const r = await fetch(`${base}/${path}`, {
-      method: "POST",
-      body: fd,
-      signal: AbortSignal.timeout(30_000),
-    });
+    // NB: never log `base` — it embeds the customer id + api key.
+    let r: Response;
+    try {
+      r = await fetch(`${base}/${path}`, {
+        method: "POST",
+        body: fd,
+        signal: AbortSignal.timeout(30_000),
+      });
+    } catch (err) {
+      logError(`OzonExpress ${path}: échec réseau`, err, {
+        provider: "ozon",
+        orgId,
+        route: path,
+      });
+      throw err;
+    }
     const text = await r.text();
     try {
       return JSON.parse(text);
     } catch {
-      throw new Error(`OzonExpress ${path}: réponse non-JSON (HTTP ${r.status}).`);
+      const err = new Error(
+        `OzonExpress ${path}: réponse non-JSON (HTTP ${r.status}).`
+      );
+      logError(err.message, err, { provider: "ozon", orgId, route: path });
+      throw err;
     }
   }
 

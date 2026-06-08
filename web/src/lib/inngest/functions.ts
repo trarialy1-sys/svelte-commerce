@@ -5,6 +5,7 @@ import { getOrgSettings } from "@/lib/org/settings";
 import { startOfLocalDayUTC } from "@/lib/time";
 import { syncParcelStatuses } from "@/lib/shipping/status-sync";
 import { sendOrgDigest } from "@/lib/digest/send";
+import { captureJobError } from "@/lib/observability/jobs";
 import { inngest, type AppEvents } from "./client";
 
 /** Active org ids (global table — system context, no per-org scope needed). */
@@ -47,22 +48,27 @@ const parcelSyncOrg = inngest.createFunction(
   },
   async ({ event, step }) => {
     const { orgId } = event.data as AppEvents["parcel/sync.requested"];
-    const result = await step.run("sync", () => syncParcelStatuses(orgId));
-    if (result.changes.length) {
-      await step.sendEvent(
-        "status-changed",
-        result.changes.map((c) => ({
-          name: "parcel/status.changed",
-          data: {
-            orgId,
-            tracking: c.tracking,
-            from: c.from,
-            to: c.to,
-          } satisfies AppEvents["parcel/status.changed"],
-        }))
-      );
+    try {
+      const result = await step.run("sync", () => syncParcelStatuses(orgId));
+      if (result.changes.length) {
+        await step.sendEvent(
+          "status-changed",
+          result.changes.map((c) => ({
+            name: "parcel/status.changed",
+            data: {
+              orgId,
+              tracking: c.tracking,
+              from: c.from,
+              to: c.to,
+            } satisfies AppEvents["parcel/status.changed"],
+          }))
+        );
+      }
+      return result;
+    } catch (err) {
+      await captureJobError("parcel-sync-org", err, orgId);
+      throw err;
     }
-    return result;
   }
 );
 
@@ -105,7 +111,12 @@ const digestSendOrg = inngest.createFunction(
       return n > 0;
     });
     if (already) return { skipped: "already-sent-today" as const };
-    return step.run("send", () => sendOrgDigest(orgId));
+    try {
+      return await step.run("send", () => sendOrgDigest(orgId));
+    } catch (err) {
+      await captureJobError("digest-send-org", err, orgId);
+      throw err;
+    }
   }
 );
 
