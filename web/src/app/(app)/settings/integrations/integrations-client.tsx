@@ -1,8 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
-import { Loader2, Plug, ShoppingBag, Sparkles, Truck } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Copy, Loader2, Plug, ShoppingBag, Sparkles, Truck } from "lucide-react";
 import { toast } from "sonner";
 
 import type { SafeIntegration } from "@/lib/integrations/types";
@@ -27,8 +27,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  beginShopifyOAuthAction,
   connectOzonAction,
-  connectShopifyAction,
   disconnectIntegrationAction,
   testIntegrationAction,
 } from "./actions";
@@ -49,13 +49,16 @@ function statusLabel(status: string): string {
 interface IntegrationsClientProps {
   integrations: SafeIntegration[];
   isOwner: boolean;
+  shopifyRedirectUri: string;
 }
 
 export function IntegrationsClient({
   integrations,
   isOwner,
+  shopifyRedirectUri,
 }: IntegrationsClientProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [openProvider, setOpenProvider] = React.useState<ProviderKey | null>(
     null
   );
@@ -63,9 +66,19 @@ export function IntegrationsClient({
 
   // Connect form fields
   const [shopDomain, setShopDomain] = React.useState("");
-  const [adminAccessToken, setAdminAccessToken] = React.useState("");
+  const [clientId, setClientId] = React.useState("");
+  const [clientSecret, setClientSecret] = React.useState("");
   const [customerId, setCustomerId] = React.useState("");
   const [apiKey, setApiKey] = React.useState("");
+
+  // Surface the OAuth callback outcome (?shopify=connected | error_*).
+  React.useEffect(() => {
+    const s = searchParams.get("shopify");
+    if (!s) return;
+    if (s === "connected") toast.success("Shopify connecté ✓");
+    else toast.error(`Échec de la connexion Shopify (${s.replace("error_", "")})`);
+    router.replace("/settings/integrations");
+  }, [searchParams, router]);
 
   const byProvider = (p: string) =>
     integrations.find((i) => i.provider === p) ?? null;
@@ -73,7 +86,8 @@ export function IntegrationsClient({
   function openDialog(provider: ProviderKey) {
     const existing = byProvider(provider);
     // Never pre-fill secrets; pre-fill safe hints only.
-    setAdminAccessToken("");
+    setClientId("");
+    setClientSecret("");
     setApiKey("");
     if (provider === "SHOPIFY") {
       setShopDomain(String(existing?.meta?.shopDomain ?? ""));
@@ -83,14 +97,31 @@ export function IntegrationsClient({
     setOpenProvider(provider);
   }
 
-  async function submit() {
-    if (!openProvider) return;
+  /** Shopify: kick off OAuth — save the app creds, then redirect to Shopify. */
+  async function connectShopifyOAuth() {
     setPending("save");
     try {
-      const result =
-        openProvider === "SHOPIFY"
-          ? await connectShopifyAction({ shopDomain, adminAccessToken })
-          : await connectOzonAction({ customerId, apiKey });
+      const r = await beginShopifyOAuthAction({
+        shopDomain,
+        clientId,
+        clientSecret,
+      });
+      if (r.ok && r.url) {
+        window.location.assign(r.url); // navigate away to Shopify's consent
+        return;
+      }
+      toast.error(r.message ?? "Échec");
+    } catch {
+      toast.error("Échec");
+    }
+    setPending(null);
+  }
+
+  /** Ozon: save credentials directly. */
+  async function submitOzon() {
+    setPending("save");
+    try {
+      const result = await connectOzonAction({ customerId, apiKey });
       if (result.ok) toast.success(result.message);
       else toast.warning(result.message);
       setOpenProvider(null);
@@ -139,7 +170,7 @@ export function IntegrationsClient({
     {
       key: "SHOPIFY",
       name: "Shopify",
-      desc: "Synchronisez produits, variantes et stock.",
+      desc: "Synchronisez produits, variantes, stock et commandes.",
       icon: ShoppingBag,
       hint: (i) =>
         i?.meta?.shopName
@@ -283,6 +314,34 @@ export function IntegrationsClient({
 
           {openProvider === "SHOPIFY" ? (
             <div className="flex flex-col gap-4">
+              <div className="bg-muted/50 text-muted-foreground space-y-1 rounded-md border p-3 text-xs">
+                <p className="text-foreground font-medium">
+                  Dans votre app Shopify (Dev Dashboard) :
+                </p>
+                <p>
+                  1. Ajoutez cette <strong>Redirect URL</strong> à l&apos;app,
+                  puis copiez le Client ID + secret ci-dessous.
+                </p>
+                <div className="bg-background mt-1 flex items-center gap-2 rounded border px-2 py-1">
+                  <code className="flex-1 truncate">{shopifyRedirectUri}</code>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-6"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(shopifyRedirectUri);
+                      toast.success("Redirect URL copiée");
+                    }}
+                  >
+                    <Copy className="size-3.5" />
+                  </Button>
+                </div>
+                <p>
+                  2. Scopes requis :{" "}
+                  <code>read_orders, read_products, read_locations, read_inventory, write_inventory, write_products</code>
+                </p>
+              </div>
               <div className="space-y-1.5">
                 <Label htmlFor="shopDomain">Domaine de la boutique</Label>
                 <Input
@@ -293,18 +352,23 @@ export function IntegrationsClient({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="adminToken">Admin API access token</Label>
+                <Label htmlFor="clientId">Client ID (API key)</Label>
                 <Input
-                  id="adminToken"
+                  id="clientId"
+                  placeholder="ex. fc94b8f710e88c86a5fc66d0e651c5bf"
+                  value={clientId}
+                  onChange={(e) => setClientId(e.target.value)}
+                  autoComplete="off"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="clientSecret">Client secret</Label>
+                <Input
+                  id="clientSecret"
                   type="password"
-                  placeholder={
-                    byProvider("SHOPIFY")?.status &&
-                    byProvider("SHOPIFY")?.status !== "disconnected"
-                      ? "•••• enregistré — saisir pour remplacer"
-                      : "shpat_…"
-                  }
-                  value={adminAccessToken}
-                  onChange={(e) => setAdminAccessToken(e.target.value)}
+                  placeholder="shpss_…"
+                  value={clientSecret}
+                  onChange={(e) => setClientSecret(e.target.value)}
                   autoComplete="off"
                 />
               </div>
@@ -346,12 +410,23 @@ export function IntegrationsClient({
             >
               Annuler
             </Button>
-            <Button onClick={submit} disabled={pending === "save"}>
-              {pending === "save" ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : null}
-              Enregistrer
-            </Button>
+            {openProvider === "SHOPIFY" ? (
+              <Button onClick={connectShopifyOAuth} disabled={pending === "save"}>
+                {pending === "save" ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <ShoppingBag className="size-4" />
+                )}
+                Connecter avec Shopify
+              </Button>
+            ) : (
+              <Button onClick={submitOzon} disabled={pending === "save"}>
+                {pending === "save" ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : null}
+                Enregistrer
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -2,6 +2,9 @@ export interface ShopifyCreds {
   shopDomain: string;
   adminAccessToken: string;
   apiVersion: string;
+  /** OAuth app credentials (modern Dev Dashboard flow). */
+  clientId?: string;
+  clientSecret?: string;
 }
 
 export interface OzonCreds {

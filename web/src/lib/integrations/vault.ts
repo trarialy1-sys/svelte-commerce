@@ -107,6 +107,71 @@ export async function saveShopify(input: {
   }
 }
 
+/**
+ * Persist the Shopify OAuth app credentials (Client ID + secret + shop) before
+ * starting the authorize redirect. No access token yet — that arrives in the
+ * callback. Owner-gated; returns the org + normalized shop for state signing.
+ */
+export async function saveShopifyApp(input: {
+  shopDomain: string;
+  clientId: string;
+  clientSecret: string;
+}): Promise<{ orgId: string; shop: string }> {
+  const { orgId } = await requireOrgRole("owner");
+  const shop = normalizeShopDomain(input.shopDomain);
+  const creds: ShopifyCreds = {
+    shopDomain: shop,
+    adminAccessToken: "", // filled by the OAuth callback
+    apiVersion: SHOPIFY_API_VERSION,
+    clientId: input.clientId.trim(),
+    clientSecret: input.clientSecret.trim(),
+  };
+  await getOrgDb(orgId!).integration.upsert({
+    where: {
+      orgId_provider: { orgId: orgId!, provider: IntegrationProvider.SHOPIFY },
+    },
+    create: {
+      orgId: orgId!,
+      provider: IntegrationProvider.SHOPIFY,
+      credentialsEnc: encrypt(JSON.stringify(creds)),
+      status: "unverified",
+      meta: { shopDomain: shop },
+    },
+    update: {
+      credentialsEnc: encrypt(JSON.stringify(creds)),
+      status: "unverified",
+      meta: { shopDomain: shop },
+    },
+  });
+  return { orgId: orgId!, shop };
+}
+
+/**
+ * Finish OAuth: store the access token returned by Shopify. Called from the
+ * callback route with a trusted orgId (extracted from the signed `state`), so
+ * it does NOT go through requireOrgRole.
+ */
+export async function completeShopifyOAuth(
+  orgId: string,
+  accessToken: string
+): Promise<void> {
+  const existing = await getCredentials(orgId, "SHOPIFY");
+  if (!existing) throw new Error("App Shopify introuvable.");
+  const creds: ShopifyCreds = { ...existing, adminAccessToken: accessToken };
+  const test = await testShopify(creds);
+  await getOrgDb(orgId).integration.update({
+    where: {
+      orgId_provider: { orgId, provider: IntegrationProvider.SHOPIFY },
+    },
+    data: {
+      credentialsEnc: encrypt(JSON.stringify(creds)),
+      status: test.ok ? "connected" : "unverified",
+      connectedAt: new Date(),
+      meta: { shopDomain: creds.shopDomain, shopName: test.shopName ?? null },
+    },
+  });
+}
+
 export async function saveOzon(input: {
   customerId: string;
   apiKey: string;
