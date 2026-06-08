@@ -4,7 +4,9 @@ import { IntegrationProvider } from "@/generated/prisma/client";
 import { getOrgDb } from "@/lib/db";
 import { requireOrgRole } from "@/lib/auth";
 import { decrypt, encrypt } from "@/lib/crypto";
+import { logError } from "@/lib/observability/logger";
 import { SHOPIFY_API_VERSION, normalizeShopDomain, testShopify } from "./shopify";
+import { registerShopifyWebhooks } from "./shopify/webhooks";
 import { testOzon } from "./ozon";
 import type {
   AnyCreds,
@@ -170,6 +172,20 @@ export async function completeShopifyOAuth(
       meta: { shopDomain: creds.shopDomain, shopName: test.shopName ?? null },
     },
   });
+
+  // Register the orders/create webhook for near-instant import. Best-effort:
+  // never fail the connect if this errors — the 15-min poll still backfills.
+  if (test.ok) {
+    try {
+      await registerShopifyWebhooks(orgId);
+    } catch (e) {
+      logError("Shopify webhook registration failed", e, {
+        provider: "shopify",
+        orgId,
+        route: "oauth_complete",
+      });
+    }
+  }
 }
 
 export async function saveOzon(input: {
