@@ -207,6 +207,8 @@ interface DataTableProps {
   onCellSave?: (rowId: string, field: string, value: string) => Promise<boolean>;
   /** Optional per-row className (e.g. status tint). */
   rowClassName?: (row: Row) => string | undefined;
+  /** Insert a group header when this key changes (rows must be sorted by it). */
+  groupBy?: (row: Row) => { key: string; label: string } | null;
 }
 
 export function DataTable({
@@ -219,6 +221,7 @@ export function DataTable({
   editableFields,
   onCellSave,
   rowClassName,
+  groupBy,
 }: DataTableProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -596,18 +599,33 @@ export function DataTable({
                 </TableCell>
               </TableRow>
             ) : (
-              rows.map((row) => {
-                const id = String(row.id);
-                return (
-                  <TableRow
-                    key={id}
-                    data-state={selected.has(id) ? "selected" : undefined}
-                    className={cn(
-                      onRowClick && "cursor-pointer",
-                      rowClassName?.(row)
-                    )}
-                    onClick={onRowClick ? () => onRowClick(row) : undefined}
-                  >
+              (() => {
+                let lastGroup: string | null = null;
+                return rows.map((row) => {
+                  const id = String(row.id);
+                  const group = groupBy?.(row) ?? null;
+                  const showHeader = group != null && group.key !== lastGroup;
+                  if (group) lastGroup = group.key;
+                  return (
+                    <React.Fragment key={id}>
+                      {showHeader ? (
+                        <TableRow className="hover:bg-transparent">
+                          <TableCell
+                            colSpan={colSpan}
+                            className="bg-muted/60 text-foreground py-1.5 text-xs font-semibold"
+                          >
+                            {group!.label}
+                          </TableCell>
+                        </TableRow>
+                      ) : null}
+                      <TableRow
+                        data-state={selected.has(id) ? "selected" : undefined}
+                        className={cn(
+                          onRowClick && "cursor-pointer",
+                          rowClassName?.(row)
+                        )}
+                        onClick={onRowClick ? () => onRowClick(row) : undefined}
+                      >
                     {hasSelection ? (
                       <TableCell onClick={(e) => e.stopPropagation()}>
                         <Checkbox
@@ -643,17 +661,19 @@ export function DataTable({
                         </TableCell>
                       );
                     })}
-                    {renderRowActions ? (
-                      <TableCell
-                        className="text-right"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {renderRowActions(row)}
-                      </TableCell>
-                    ) : null}
-                  </TableRow>
-                );
-              })
+                      {renderRowActions ? (
+                        <TableCell
+                          className="text-right"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {renderRowActions(row)}
+                        </TableCell>
+                      ) : null}
+                      </TableRow>
+                    </React.Fragment>
+                  );
+                });
+              })()
             )}
           </TableBody>
         </Table>

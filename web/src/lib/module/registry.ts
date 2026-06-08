@@ -9,6 +9,7 @@ import { catalogConfig } from "@/modules/catalog/config";
 import { stockConfig } from "@/modules/stock/config";
 import {
   ordersConfig,
+  ordersConfirmedConfig,
   ordersReadyConfig,
   ordersToConfirmConfig,
 } from "@/modules/orders/config";
@@ -79,6 +80,10 @@ export const MODULE_REGISTRY: Record<string, RegistryEntry> = {
   orders: { config: ordersConfig, bulkHandlers: orderBulkHandlers() },
   orders_confirm: {
     config: ordersToConfirmConfig,
+    bulkHandlers: orderBulkHandlers(),
+  },
+  orders_confirmed: {
+    config: ordersConfirmedConfig,
     bulkHandlers: orderBulkHandlers(),
   },
   orders_ready: { config: ordersReadyConfig, bulkHandlers: orderBulkHandlers() },
