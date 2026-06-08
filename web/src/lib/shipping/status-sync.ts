@@ -59,6 +59,8 @@ export interface SyncResult {
   updated: number;
   failed: number;
   byStatus: Record<string, number>;
+  /** Per-parcel transitions this run (for parcel/status.changed events). */
+  changes: Array<{ tracking: string; from: string; to: string }>;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -69,10 +71,8 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * a single parcel's failure never aborts the batch. Writes ONE summary AuditLog
  * row per run (not one per parcel).
  *
- * SCALING NOTE: this runs synchronously inside a Vercel function (cron or
- * action). Fine for modest volume. If parcel counts grow enough to risk the
- * function timeout, move polling to a durable background queue — that is the
- * Phase 3 (Inngest) work. Do NOT build that here.
+ * Now driven by Inngest (3.1): scheduled fan-out per org, with retries +
+ * concurrency limits. Stays idempotent so retries are safe.
  */
 export async function syncParcelStatuses(
   orgId: string,
@@ -80,7 +80,7 @@ export async function syncParcelStatuses(
 ): Promise<SyncResult> {
   const fetcher = opts.fetcher ?? (LIVE_ENABLED ? fetchOzonStatusLive : null);
   if (!fetcher) {
-    return { configured: false, polled: 0, updated: 0, failed: 0, byStatus: {} };
+    return { configured: false, polled: 0, updated: 0, failed: 0, byStatus: {}, changes: [] };
   }
 
   const odb = getOrgDb(orgId);
@@ -89,7 +89,7 @@ export async function syncParcelStatuses(
     select: { id: true, tracking: true, status: true },
   });
   if (parcels.length === 0) {
-    return { configured: true, polled: 0, updated: 0, failed: 0, byStatus: {} };
+    return { configured: true, polled: 0, updated: 0, failed: 0, byStatus: {}, changes: [] };
   }
 
   // Per-org credentials from the vault (server-only). Missing creds → not configured.
@@ -97,12 +97,13 @@ export async function syncParcelStatuses(
   try {
     client = await getOzonClient(orgId);
   } catch {
-    return { configured: false, polled: 0, updated: 0, failed: 0, byStatus: {} };
+    return { configured: false, polled: 0, updated: 0, failed: 0, byStatus: {}, changes: [] };
   }
 
   let updated = 0;
   let failed = 0;
   const byStatus: Record<string, number> = {};
+  const changes: SyncResult["changes"] = [];
   const unknown = new Set<string>();
   const BATCH = 5;
 
@@ -127,6 +128,7 @@ export async function syncParcelStatuses(
           });
           updated++;
           byStatus[mapped] = (byStatus[mapped] ?? 0) + 1;
+          changes.push({ tracking: p.tracking as string, from: p.status, to: mapped });
         } catch (e) {
           failed++;
           console.error(`[status-sync] parcel ${p.tracking} failed`, e);
@@ -155,5 +157,5 @@ export async function syncParcelStatuses(
     });
   }
 
-  return { configured: true, polled: parcels.length, updated, failed, byStatus };
+  return { configured: true, polled: parcels.length, updated, failed, byStatus, changes };
 }
