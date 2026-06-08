@@ -520,6 +520,7 @@ export function DataTable({
                   key={col.key}
                   className={cn(
                     dense && "h-9 text-xs",
+                    dense && "border-border/60 border-r last:border-r-0",
                     col.align === "right" && "text-right"
                   )}
                 >
@@ -618,6 +619,7 @@ export function DataTable({
                           key={col.key}
                           className={cn(
                             dense && "py-1.5 text-xs",
+                            dense && "border-border/60 border-r last:border-r-0",
                             col.align === "right" && "text-right"
                           )}
                           onClick={
