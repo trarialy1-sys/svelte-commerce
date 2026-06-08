@@ -48,19 +48,30 @@ query Orders($cursor: String) {
 }`;
 
 /**
- * Map a raw Shopify GraphQL error to a clear, actionable message. The most
- * common one for orders is a missing `read_orders` scope on the custom app.
+ * Map a raw Shopify GraphQL error to a clear, actionable message. Two distinct
+ * gates trip people up — and the raw message is appended so the real cause is
+ * never hidden.
  */
 function friendlyShopifyError(e: unknown): Error {
   const msg = e instanceof Error ? e.message : String(e);
-  if (/access denied|read_orders|read_all_orders|not approved|scope/i.test(msg)) {
+  // Orders carry customer PII (name/phone/address). Reading those fields needs
+  // "Protected customer data access" enabled on the app — separate from the
+  // read_orders scope.
+  if (/protected customer data|approved to access/i.test(msg)) {
     return new Error(
-      "L'app Shopify n'a pas la permission de lire les commandes. Ajoutez le " +
-        "scope « read_orders » à votre app Shopify, réinstallez-la, puis " +
-        "reconnectez-la dans Paramètres → Intégrations."
+      "L'app Shopify doit être autorisée aux « données client protégées » " +
+        "(nom, téléphone, adresse) : activez « Protected customer data access » " +
+        `dans l'app, puis reconnectez Shopify. [Shopify: ${msg}]`
     );
   }
-  return e instanceof Error ? e : new Error(msg);
+  if (/access denied|read_orders|read_all_orders|scope/i.test(msg)) {
+    return new Error(
+      "Permission « read_orders » non accordée au jeton actuel. Un scope ajouté " +
+        "ne s'applique qu'après une RECONNEXION : refaites Paramètres → " +
+        `Intégrations → Shopify → Connecter. [Shopify: ${msg}]`
+    );
+  }
+  return new Error(`Erreur Shopify : ${msg}`);
 }
 
 export async function importShopifyOrders(
