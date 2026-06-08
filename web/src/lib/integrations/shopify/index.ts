@@ -57,8 +57,22 @@ export async function testShopify(
       const data = (await res.json()) as { shop?: { name?: string } };
       return { ok: true, message: "Connexion réussie", shopName: data.shop?.name };
     }
-    if (res.status === 401 || res.status === 403) {
-      return { ok: false, message: "Token invalide ou permissions insuffisantes" };
+    if (res.status === 401) {
+      return {
+        ok: false,
+        message:
+          "Token invalide. Collez l'« Admin API access token » (commence par " +
+          "« shpat_ ») d'une app personnalisée créée dans l'admin de la boutique " +
+          "— pas le secret client (« shpss_ »).",
+      };
+    }
+    if (res.status === 403) {
+      return {
+        ok: false,
+        message:
+          "Permissions insuffisantes. Ajoutez les scopes (dont read_orders) à " +
+          "l'app puis réinstallez-la avant de reconnecter.",
+      };
     }
     return { ok: false, message: `Réponse inattendue de Shopify (${res.status})` };
   } catch {
