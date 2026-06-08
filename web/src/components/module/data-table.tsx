@@ -205,6 +205,8 @@ interface DataTableProps {
   editableFields?: Set<string>;
   /** Persist an inline edit; return true on success. */
   onCellSave?: (rowId: string, field: string, value: string) => Promise<boolean>;
+  /** Optional per-row className (e.g. status tint). */
+  rowClassName?: (row: Row) => string | undefined;
 }
 
 export function DataTable({
@@ -216,6 +218,7 @@ export function DataTable({
   dense,
   editableFields,
   onCellSave,
+  rowClassName,
 }: DataTableProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -599,7 +602,10 @@ export function DataTable({
                   <TableRow
                     key={id}
                     data-state={selected.has(id) ? "selected" : undefined}
-                    className={onRowClick ? "cursor-pointer" : undefined}
+                    className={cn(
+                      onRowClick && "cursor-pointer",
+                      rowClassName?.(row)
+                    )}
                     onClick={onRowClick ? () => onRowClick(row) : undefined}
                   >
                     {hasSelection ? (
