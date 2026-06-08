@@ -25,12 +25,19 @@ function stubFetch(payload: unknown) {
 
 async function newOrder(): Promise<string> {
   seq += 1;
-  const order = await getOrgDb(ORG).order.create({
+  const odb = getOrgDb(ORG);
+  // Receiver name comes from the linked customer (required to send).
+  const customer = await odb.customer.create({
+    data: { orgId: ORG, name: "Client Test", phone: `06990000${String(seq).padStart(2, "0")}` },
+  });
+  const order = await odb.order.create({
     data: {
       code: `OZ-${seq}`,
       cityId: 101, // resolved numeric Ozon city id (required to send)
-      phone: "0612345678",
+      phone: `06120000${String(seq).padStart(2, "0")}`,
+      address: "123 Rue de Test",
       totalPrice: 100,
+      customerId: customer.id,
       items: { create: [{ orgId: ORG, sku: "SKU-1", qty: 1, unitPrice: 100 }] },
     },
   });
@@ -49,6 +56,7 @@ afterEach(async () => {
   await odb.parcel.deleteMany({});
   await odb.orderItem.deleteMany({});
   await odb.order.deleteMany({});
+  await odb.customer.deleteMany({});
   await odb.auditLog.deleteMany({});
 });
 

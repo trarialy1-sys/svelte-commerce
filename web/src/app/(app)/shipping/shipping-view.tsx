@@ -19,6 +19,7 @@ import {
 import { toast } from "sonner";
 
 import { meetsOrgRole, type AppRole } from "@/lib/auth/roles";
+import { missingShippingFields } from "@/lib/shipping/validate";
 import { formatDate, formatMoney } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
@@ -229,6 +230,19 @@ export function ShippingView({
   const selectedResolved = [...selected].filter((id) =>
     selectableIds.includes(id)
   );
+  // Selected orders that would be rejected by Ozon for missing required fields.
+  const incompleteSelected = selectedResolved.filter((id) => {
+    const r = rows.find((x) => x.id === id);
+    return (
+      r != null &&
+      missingShippingFields({
+        customerName: r.customer,
+        phone: r.phone,
+        address: r.address,
+        price: r.total,
+      }).length > 0
+    );
+  }).length;
 
   async function pick(row: ShippingRow, c: CityRow) {
     setBusy(true);
@@ -547,6 +561,12 @@ export function ShippingView({
                 >
                   Colis déjà créés → BL seul
                 </Button>
+                {incompleteSelected > 0 ? (
+                  <span className="text-destructive flex items-center gap-1 text-xs font-medium">
+                    <TriangleAlert className="size-3.5" />
+                    {incompleteSelected} incomplète(s)
+                  </span>
+                ) : null}
                 <Button
                   size="sm"
                   disabled={sending || selectedResolved.length === 0}
@@ -697,6 +717,20 @@ export function ShippingView({
                           Ville : « {row.cityRaw || "—"} »
                           {row.address ? ` · ${row.address}` : ""}
                         </p>
+                        {(() => {
+                          const missing = missingShippingFields({
+                            customerName: row.customer,
+                            phone: row.phone,
+                            address: row.address,
+                            price: row.total,
+                          });
+                          return missing.length > 0 ? (
+                            <p className="text-destructive mt-1 flex items-center gap-1 text-xs font-medium">
+                              <TriangleAlert className="size-3.5" />
+                              Champs manquants : {missing.join(", ")}
+                            </p>
+                          ) : null;
+                        })()}
                         {resolved ? (
                           <p className="text-green mt-1 text-sm font-medium">
                             → {resolved.name}
