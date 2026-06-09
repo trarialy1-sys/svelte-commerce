@@ -3,7 +3,7 @@ import "server-only";
 import { DeliveryNoteStatus } from "@/generated/prisma/client";
 import { getOrgDb } from "@/lib/db";
 import { getOzonClient } from "./ozon";
-import { errMsg, findBLRef } from "./ozon-helpers";
+import { errMsg, findBLRef, ozonHasError } from "./ozon-helpers";
 
 export interface BLResult {
   ref: string;
@@ -36,16 +36,22 @@ export async function createDeliveryNote(
   const ref = findBLRef(j1);
   if (!ref) throw new Error(`Référence BL introuvable : ${errMsg(j1)}`);
 
-  // 2) attach the codes
+  // 2) attach the codes — fail loudly so we never persist an empty BL
   const fd2 = new FormData();
   fd2.append("Ref", ref);
   codes.forEach((c, i) => fd2.append(`Codes[${i}]`, c));
-  await post("add-parcel-to-delivery-note", fd2);
+  const j2 = await post("add-parcel-to-delivery-note", fd2);
+  if (ozonHasError(j2)) {
+    throw new Error(`BL ${ref} : échec de l'ajout des colis — ${errMsg(j2)}`);
+  }
 
   // 3) save it
   const fd3 = new FormData();
   fd3.append("Ref", ref);
-  await post("save-delivery-note", fd3);
+  const j3 = await post("save-delivery-note", fd3);
+  if (ozonHasError(j3)) {
+    throw new Error(`BL ${ref} : échec de l'enregistrement — ${errMsg(j3)}`);
+  }
 
   const pdfUrl = `https://client.ozonexpress.ma/pdf-delivery-note?dn-ref=${ref}`;
   const labelsUrl = `https://client.ozonexpress.ma/pdf-delivery-note-tickets?dn-ref=${ref}`;
