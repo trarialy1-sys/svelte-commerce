@@ -69,6 +69,16 @@ function getNested(row: Row, key: string): unknown {
   }, row);
 }
 
+/** Plain-text value of a cell, for a truncated column's hover tooltip. */
+function cellTitle(column: Column, row: Row): string | undefined {
+  if (column.type === "custom") {
+    const r = column.render?.(row);
+    return typeof r === "string" ? r : undefined;
+  }
+  const v = getNested(row, column.key);
+  return v == null ? undefined : String(v);
+}
+
 function Cell({ column, row }: { column: Column; row: Row }) {
   const value = getNested(row, column.key);
   switch (column.type) {
@@ -644,8 +654,19 @@ export function DataTable({
                           className={cn(
                             dense && "py-1.5 text-xs",
                             dense && "border-border/60 border-r last:border-r-0",
-                            col.align === "right" && "text-right"
+                            col.align === "right" && "text-right",
+                            col.maxWidth != null && "truncate"
                           )}
+                          style={
+                            col.maxWidth != null
+                              ? { maxWidth: col.maxWidth }
+                              : undefined
+                          }
+                          title={
+                            col.maxWidth != null
+                              ? cellTitle(col, row)
+                              : undefined
+                          }
                           onClick={
                             editable ? (e) => e.stopPropagation() : undefined
                           }

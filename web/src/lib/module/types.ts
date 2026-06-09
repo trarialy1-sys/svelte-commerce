@@ -28,6 +28,8 @@ export interface Column {
   labelMap?: Record<string, string>;
   /** for type 'custom' (client-rendered) */
   render?: (row: Row) => ReactNode;
+  /** Cap the column width (px) — content truncates with a hover tooltip. */
+  maxWidth?: number;
 }
 
 export type Filter =
