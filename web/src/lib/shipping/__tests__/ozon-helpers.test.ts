@@ -60,5 +60,8 @@ describe("formatPhone", () => {
     expect(formatPhone("212612345678")).toBe("0612345678");
     expect(formatPhone("0612345678")).toBe("0612345678");
     expect(formatPhone("06 12 34 56 78")).toBe("0612345678");
+    // +212 with a stray leading 0 on the local part (13 digits).
+    expect(formatPhone("+2120662137060")).toBe("0662137060");
+    expect(formatPhone("00212662137060")).toBe("0662137060");
   });
 });

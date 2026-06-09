@@ -93,11 +93,13 @@ export function findBLRef(json: unknown): string | null {
   return found ?? (typeof direct === "string" ? direct : null);
 }
 
-/** Moroccan phone normalizer — exact port of the tool's formatPhone. */
+/** Moroccan phone normalizer → `0XXXXXXXXX` (10 digits). Handles +212 / 00212,
+ *  a stray leading 0 after the country code, spaces, and bare 9-digit numbers. */
 export function formatPhone(tel: unknown): string {
-  const s = String(tel ?? "").replace(/[^\d]/g, "");
-  if (s.length === 9 && /^[5-7]/.test(s)) return "0" + s;
-  if (s.length === 12 && s.startsWith("212")) return "0" + s.slice(3);
-  if (s.length === 10 && s.startsWith("0")) return s;
+  let s = String(tel ?? "").replace(/[^\d]/g, "");
+  if (s.startsWith("00")) s = s.slice(2); // 00212… → 212…
+  if (s.startsWith("212")) s = s.slice(3); // strip the MA country code
+  if (s.length === 9 && /^[5-7]/.test(s)) return "0" + s; // 6/7/5XXXXXXXX → 0…
+  if (s.length === 10 && s.startsWith("0")) return s; // already local
   return s;
 }
