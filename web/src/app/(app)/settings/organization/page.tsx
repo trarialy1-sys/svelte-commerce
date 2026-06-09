@@ -14,6 +14,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { CityCatalogButton } from "../city-catalog-button";
+import { DangerZoneCard } from "../danger-zone-card";
 import { OrganizationForm } from "./organization-form";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +23,7 @@ export default async function OrganizationSettingsPage() {
   const { orgId, appRole } = await getAuthContext();
   const canEdit = meetsOrgRole(appRole, "admin");
   const isAdmin = canEdit;
+  const isOwner = appRole === "owner";
 
   const { userId } = await getAuthContext();
   const settings = orgId ? await getOrgSettings(orgId) : null;
@@ -87,6 +89,8 @@ export default async function OrganizationSettingsPage() {
           emailConfigured={emailConfigured()}
         />
       ) : null}
+
+      {isOwner ? <DangerZoneCard /> : null}
     </>
   );
 }

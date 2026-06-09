@@ -39,6 +39,36 @@ async function audit(
   });
 }
 
+/**
+ * Danger zone: wipe this org's transactional test data — all orders (cascading
+ * to their items + parcels) and delivery notes. Keeps catalog, customers,
+ * integrations and the city catalog. Owner-only; requires the confirmation word.
+ */
+export async function resetTestDataAction(
+  confirm: string
+): Promise<ActionResult & { deleted?: number }> {
+  const { orgId, userId } = await requireOrgRole("owner");
+  if (confirm.trim().toUpperCase() !== "SUPPRIMER") {
+    return { ok: false, message: "Tapez SUPPRIMER pour confirmer." };
+  }
+  const odb = getOrgDb(orgId!);
+  // Delivery notes first (their parcel links cascade), then orders — deleting an
+  // order cascades to its items and parcel (onDelete: Cascade).
+  await odb.deliveryNote.deleteMany({});
+  const res = await odb.order.deleteMany({});
+  await audit(orgId!, userId, "org.reset_test_data", "Organization", orgId!, {
+    orders: res.count,
+  });
+  revalidatePath("/orders");
+  revalidatePath("/shipping");
+  revalidatePath("/dashboard");
+  return {
+    ok: true,
+    deleted: res.count,
+    message: `${res.count} commande(s) supprimée(s).`,
+  };
+}
+
 // ── Organization ───────────────────────────────────────────────────────────
 
 export async function updateOrganizationAction(input: {
