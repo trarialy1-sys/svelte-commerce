@@ -77,7 +77,7 @@ const COLUMNS: Column[] = [
   { key: "customer.name", label: "Destinataire", type: "who" },
   { key: "address", label: "Adresse", type: "text", maxWidth: 200 },
   { key: "phone", label: "Téléphone", type: "mono" },
-  { key: "cityRaw", label: "Ville", type: "text" },
+  { key: "cityRaw", label: "Ville", type: "text", maxWidth: 150 },
   {
     key: "status",
     label: "Statut",
