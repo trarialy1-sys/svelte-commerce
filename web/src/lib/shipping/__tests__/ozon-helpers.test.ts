@@ -5,7 +5,18 @@ import {
   findBLRef,
   formatPhone,
   isUsedBefore,
+  ozonHasError,
 } from "@/lib/shipping/ozon-helpers";
+
+describe("ozonHasError", () => {
+  it("detects a nested RESULT: ERROR", () => {
+    expect(ozonHasError({ "ADD-DN": { RESULT: "ERROR", MESSAGE: "x" } })).toBe(
+      true
+    );
+    expect(ozonHasError({ "SAVE-DN": { RESULT: "SUCCESS" } })).toBe(false);
+    expect(ozonHasError({ ref: "BL-1" })).toBe(false);
+  });
+});
 
 describe("deepFindKey", () => {
   it("finds a nested tracking number (case-insensitive)", () => {

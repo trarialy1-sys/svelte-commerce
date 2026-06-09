@@ -66,6 +66,31 @@ export function isUsedBefore(message: string): boolean {
   return /used before/i.test(message);
 }
 
+/** True if the response contains a `RESULT: "ERROR"` node anywhere. */
+export function ozonHasError(json: unknown): boolean {
+  let found = false;
+  const walk = (o: unknown): void => {
+    if (found || o == null || typeof o !== "object") return;
+    if (Array.isArray(o)) {
+      o.forEach(walk);
+      return;
+    }
+    const entries = Object.entries(o as Record<string, unknown>);
+    if (
+      entries.some(
+        ([k, v]) =>
+          k.toLowerCase() === "result" && String(v).toLowerCase() === "error"
+      )
+    ) {
+      found = true;
+      return;
+    }
+    for (const [, v] of entries) walk(v);
+  };
+  walk(json);
+  return found;
+}
+
 /**
  * Find the delivery-note ref. Ozon returns it as `ref`; we also scan any value
  * matching /^BL[-_]/i as a fallback (per the brief).
