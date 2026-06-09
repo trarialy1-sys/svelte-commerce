@@ -24,6 +24,11 @@ function productCell(row: Row): string {
 function skuCell(row: Row): string {
   return orderItems(row)[0]?.sku || "—";
 }
+/** OzonExpress tracking (present once the order has been shipped). */
+function trackingCell(row: Row): string {
+  const p = (row as { parcel?: { tracking?: string | null } | null }).parcel;
+  return p?.tracking || "—";
+}
 
 
 const STATUS_LABELS: Record<string, string> = {
@@ -85,6 +90,13 @@ const COLUMNS: Column[] = [
     badgeMap: STATUS_TONES,
     labelMap: STATUS_LABELS,
   },
+  {
+    key: "tracking",
+    label: "Tracking",
+    type: "custom",
+    render: trackingCell,
+    maxWidth: 150,
+  },
 ];
 
 const FILTERS: Filter[] = [
@@ -124,6 +136,7 @@ const EXPORT_COLUMNS: ExportColumn[] = [
 const INCLUDE = {
   customer: { select: { name: true } },
   items: { select: { title: true, sku: true }, take: 5 },
+  parcel: { select: { tracking: true } },
 };
 
 /** Build an Orders module config variant (shared columns, optional scoping). */
