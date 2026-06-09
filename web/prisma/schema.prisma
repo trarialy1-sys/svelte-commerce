@@ -269,6 +269,7 @@ model OrderItem {
   orgId     String
   orderId   String
   sku       String
+  title     String? // product/line-item name (Shopify); null for Excel imports
   qty       Int     @default(1)
   unitPrice Decimal @db.Decimal(10, 2)
   order     Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)

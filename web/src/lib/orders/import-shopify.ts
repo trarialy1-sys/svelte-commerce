@@ -7,6 +7,7 @@ import { upsertCustomerFromOrder } from "@/lib/customers/upsert";
 
 interface LineItem {
   sku: string | null;
+  name: string | null;
   quantity: number;
   originalUnitPriceSet: { shopMoney: { amount: string } };
 }
@@ -39,7 +40,7 @@ query Orders($cursor: String) {
       totalPriceSet { shopMoney { amount } }
       shippingAddress { name phone address1 city }
       lineItems(first: 50) {
-        nodes { sku quantity originalUnitPriceSet { shopMoney { amount } } }
+        nodes { sku name quantity originalUnitPriceSet { shopMoney { amount } } }
       }
     }
   }
@@ -146,6 +147,7 @@ export async function importShopifyOrders(
               orgId,
               orderId: order.id,
               sku: li.sku as string,
+              title: li.name ?? null,
               qty: li.quantity,
               unitPrice:
                 Number(li.originalUnitPriceSet?.shopMoney?.amount ?? "0") || 0,
@@ -182,7 +184,13 @@ interface WebhookOrderPayload {
     address1?: string | null;
     city?: string | null;
   } | null;
-  line_items?: { sku?: string | null; quantity?: number; price?: string }[];
+  line_items?: {
+    sku?: string | null;
+    name?: string | null;
+    title?: string | null;
+    quantity?: number;
+    price?: string;
+  }[];
 }
 
 /**
@@ -244,6 +252,7 @@ export async function importShopifyOrderWebhook(
         orgId,
         orderId: order.id,
         sku: li.sku as string,
+        title: li.name ?? li.title ?? null,
         qty: li.quantity ?? 1,
         unitPrice: Number(li.price ?? "0") || 0,
       },
