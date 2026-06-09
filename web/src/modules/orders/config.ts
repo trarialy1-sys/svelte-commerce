@@ -123,7 +123,7 @@ const EXPORT_COLUMNS: ExportColumn[] = [
 
 const INCLUDE = {
   customer: { select: { name: true } },
-  items: { select: { title: true, sku: true } },
+  items: { select: { title: true, sku: true }, take: 5 },
 };
 
 /** Build an Orders module config variant (shared columns, optional scoping). */
