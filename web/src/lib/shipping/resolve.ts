@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db, getOrgDb } from "@/lib/db";
+import { arabicToLatin } from "./arabic";
 
 /**
  * City-resolution engine — a faithful port of the proven logic in
@@ -18,9 +19,13 @@ import { db, getOrgDb } from "@/lib/db";
  *    name, shortest name wins.
  */
 
-/** Normalize for matching: strip diacritics, lowercase, non-alnum -> spaces. */
+/**
+ * Normalize for matching: transliterate Arabic villes to Latin first (so an
+ * Arabic city name maps to the Latin catalog), then strip diacritics, lowercase,
+ * and collapse non-alnum to spaces.
+ */
 export function cityKey(s: unknown): string {
-  return String(s ?? "")
+  return arabicToLatin(s)
     .normalize("NFD")
     .replace(/\p{M}/gu, "")
     .toLowerCase()

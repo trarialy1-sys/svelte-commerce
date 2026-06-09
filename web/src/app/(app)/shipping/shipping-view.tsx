@@ -19,6 +19,7 @@ import {
 import { toast } from "sonner";
 
 import { meetsOrgRole, type AppRole } from "@/lib/auth/roles";
+import { arabicToLatin } from "@/lib/shipping/arabic";
 import { missingShippingFields } from "@/lib/shipping/validate";
 import { formatDate, formatMoney } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
@@ -68,7 +69,8 @@ export interface DeliveryNoteRow {
 }
 
 function norm(s: string): string {
-  return s
+  // Transliterate Arabic first so typing مكناس matches the Latin catalog.
+  return arabicToLatin(s)
     .normalize("NFD")
     .replace(/\p{M}/gu, "")
     .toLowerCase()
