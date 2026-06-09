@@ -1,6 +1,7 @@
 import {
   BarChart3,
   Boxes,
+  CalendarCheck,
   ClipboardList,
   LayoutDashboard,
   LineChart,
@@ -39,6 +40,7 @@ export const NAV: NavSection[] = [
   {
     label: "Outils",
     items: [
+      { label: "Lot du jour", href: "/today", icon: CalendarCheck },
       { label: "Commandes", href: "/orders", icon: ClipboardList },
       { label: "Livraisons & BL", href: "/shipping", icon: Truck },
       { label: "Stock", href: "/stock", icon: Boxes },
