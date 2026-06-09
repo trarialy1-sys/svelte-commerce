@@ -41,17 +41,20 @@ export default async function TodayPage() {
       take: 500,
     }),
     odb.order.findMany({
-      where: { parcel: { isNot: null }, createdAt: { gte: since } },
+      where: { parcel: { isNot: null }, confirmedAt: { gte: since } },
       include: {
         customer: { select: { name: true } },
         parcel: { select: { tracking: true } },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: { confirmedAt: "desc" },
       take: 500,
     }),
   ]);
 
   type OrderWithCustomer = (typeof toConfirm)[number];
+  // `dayAt` decides the batch. Confirmed/shipped orders group by their
+  // confirmation day; orders still awaiting a call have none, so they fall back
+  // to their import day.
   const base = (o: OrderWithCustomer, bucket: TodayOrder["bucket"]) => ({
     id: o.id,
     code: o.code,
@@ -59,7 +62,7 @@ export default async function TodayPage() {
     phone: o.phone ?? "",
     cityRaw: o.cityRaw ?? "",
     total: Number(o.totalPrice),
-    createdAt: o.createdAt.toISOString(),
+    dayAt: (bucket === "toConfirm" ? o.createdAt : o.confirmedAt ?? o.createdAt).toISOString(),
     bucket,
   });
 

@@ -39,8 +39,8 @@ export interface TodayOrder {
   phone: string;
   cityRaw: string;
   total: number;
-  /** ISO timestamp — the order's import day decides its batch. */
-  createdAt: string;
+  /** ISO timestamp deciding the batch: confirmation day (else import day). */
+  dayAt: string;
   bucket: "toConfirm" | "ready" | "shipped";
   /** Ready orders only: city is resolved or confidently auto-detectable. */
   cityOk: boolean;
@@ -89,7 +89,7 @@ function groupByDay(orders: TodayOrder[]): DayBatch[] {
   const tk = todayKey();
   const map = new Map<string, DayBatch>();
   for (const o of orders) {
-    const { key, label } = dayOf(o.createdAt);
+    const { key, label } = dayOf(o.dayAt);
     let batch = map.get(key);
     if (!batch) {
       batch = {
