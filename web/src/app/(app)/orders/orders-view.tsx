@@ -53,6 +53,7 @@ import {
   STATUS_LABELS,
 } from "@/modules/orders/config";
 import {
+  getOrderCountsAction,
   getOrderDetailAction,
   importExcelAction,
   importShopifyAction,
@@ -127,10 +128,20 @@ export function OrdersView({ role }: { role: AppRole | null }) {
       "orders_confirm",
       "orders_confirmed",
       "orders_ready",
+      "order-counts",
     ]) {
       queryClient.invalidateQueries({ queryKey: [key] });
     }
   }, [queryClient]);
+
+  const { data: counts } = useQuery({
+    queryKey: ["order-counts"],
+    queryFn: async () => {
+      const r = await getOrderCountsAction();
+      return r.ok ? r.data : null;
+    },
+  });
+  const n = (v: number | undefined) => (v == null ? "" : ` (${v})`);
 
   const applyStatus = React.useCallback(
     async (orderId: string, status: string, callbackAt?: string) => {
@@ -190,10 +201,16 @@ export function OrdersView({ role }: { role: AppRole | null }) {
 
       <Tabs defaultValue="all">
         <TabsList>
-          <TabsTrigger value="all">Toutes</TabsTrigger>
-          <TabsTrigger value="confirm">À confirmer</TabsTrigger>
-          <TabsTrigger value="confirmed">Confirmées</TabsTrigger>
-          <TabsTrigger value="ready">Prêt à expédier</TabsTrigger>
+          <TabsTrigger value="all">Toutes{n(counts?.all)}</TabsTrigger>
+          <TabsTrigger value="confirm">
+            À confirmer{n(counts?.toConfirm)}
+          </TabsTrigger>
+          <TabsTrigger value="confirmed">
+            Confirmées{n(counts?.confirmed)}
+          </TabsTrigger>
+          <TabsTrigger value="ready">
+            Prêt à expédier{n(counts?.ready)}
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="all">
           <DataTable config={ordersConfig} {...tableProps} />

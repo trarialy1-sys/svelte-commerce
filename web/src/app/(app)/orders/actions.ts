@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireOrgRole } from "@/lib/auth";
+import { requireOrg, requireOrgRole } from "@/lib/auth";
 import { getOrgDb } from "@/lib/db";
 import { OrderStatus } from "@/generated/prisma/client";
 import { importExcel } from "@/lib/orders/import-excel";
@@ -35,6 +35,27 @@ export async function importExcelAction(
     const res = await importExcel(orgId!, buf);
     revalidatePath("/orders");
     return { ok: true, data: res };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Per-tab order counts for the Commandes tab labels. */
+export async function getOrderCountsAction(): Promise<
+  Result<{ all: number; toConfirm: number; confirmed: number; ready: number }>
+> {
+  const { orgId } = await requireOrg();
+  const odb = getOrgDb(orgId!);
+  try {
+    const [all, toConfirm, confirmed, ready] = await Promise.all([
+      odb.order.count(),
+      odb.order.count({
+        where: { status: { in: ["NOUVELLE", "REPORTEE", "PAS_DE_REPONSE"] } },
+      }),
+      odb.order.count({ where: { status: "CONFIRMEE" } }),
+      odb.order.count({ where: { status: "CONFIRMEE", parcel: { is: null } } }),
+    ]);
+    return { ok: true, data: { all, toConfirm, confirmed, ready } };
   } catch (e) {
     return fail(e);
   }
