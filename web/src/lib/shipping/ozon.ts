@@ -1,7 +1,7 @@
 import "server-only";
 
 import { ParcelStatus } from "@/generated/prisma/client";
-import { getOrgDb } from "@/lib/db";
+import { db, getOrgDb } from "@/lib/db";
 import { getCredentials } from "@/lib/integrations/vault";
 import { logError } from "@/lib/observability/logger";
 import {
@@ -77,11 +77,64 @@ interface SendOpts {
   actorUserId?: string | null;
 }
 
+/** Strip a city name to A–Z (drop accents/spaces/punctuation), uppercased. */
+function cityCode(name: string): string {
+  return name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/gu, "")
+    .replace(/[^A-Za-z]/g, "")
+    .toUpperCase();
+}
+
+interface CodeSuiviOrder {
+  code: string;
+  phone: string | null;
+  cityId: number | null;
+  cityRaw: string | null;
+  items: { sku: string }[];
+}
+
+/**
+ * Generate the code d'envoi: `{firstSKU}_{CITY3}{phoneLast4}` — city = the
+ * resolved OzonExpress city name (first 3 letters). Deduped against OTHER
+ * orders' parcels by appending `-2`, `-3`, …
+ */
+async function buildCodeSuivi(
+  odb: ReturnType<typeof getOrgDb>,
+  orderId: string,
+  order: CodeSuiviOrder
+): Promise<string> {
+  const sku = order.items[0]?.sku || order.code || "NA";
+  let cityName = order.cityRaw ?? "";
+  if (order.cityId != null) {
+    const city = await db.cityCatalog.findUnique({
+      where: { id: order.cityId },
+      select: { name: true },
+    });
+    if (city?.name) cityName = city.name;
+  }
+  const city3 = cityCode(cityName).slice(0, 3) || "VIL";
+  const last4 = formatPhone(order.phone).replace(/\D/g, "").slice(-4);
+  const base = `${sku}_${city3}${last4}`;
+
+  let candidate = base;
+  let i = 2;
+  while (
+    await odb.parcel.findFirst({
+      where: { tracking: candidate, orderId: { not: orderId } },
+      select: { id: true },
+    })
+  ) {
+    candidate = `${base}-${i++}`;
+  }
+  return candidate;
+}
+
 /**
  * Create one real parcel at OzonExpress for a Prêtes order, then persist the
- * Parcel row. Faithful port of `ozon-send.js` add-parcel + the locked rules:
- * numeric `parcel-city`, tracking-number = the order code (never suffixed),
- * deep-find TRACKING-NUMBER, errMsg on failure, "Used Before" → usedBefore.
+ * Parcel row. The tracking is the generated code d'envoi (or an operator
+ * override on retry); deep-find TRACKING-NUMBER, errMsg on failure, "Used
+ * Before" → usedBefore.
  */
 export async function createParcelForOrder(
   orgId: string,
@@ -121,7 +174,10 @@ export async function createParcelForOrder(
   }
 
   try {
-    const tracking = opts.tracking ?? code;
+    // Code d'envoi: operator override on retry, else generated
+    // {SKU}_{CITY3}{phoneLast4} (deduped).
+    const tracking =
+      opts.tracking?.trim() || (await buildCodeSuivi(odb, orderId, order));
     const fd = new FormData();
     if (tracking) fd.append("tracking-number", tracking);
     fd.append("parcel-receiver", order.customer?.name ?? "");
