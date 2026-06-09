@@ -59,7 +59,13 @@ const SOURCE_LABELS: Record<string, string> = {
 const COLUMNS: Column[] = [
   { key: "createdAt", label: "Date", type: "date", sortable: true },
   { key: "code", label: "N°", type: "mono", sortable: true },
-  { key: "product", label: "Produit", type: "custom", render: productCell },
+  {
+    key: "product",
+    label: "Produit",
+    type: "custom",
+    render: productCell,
+    maxWidth: 240,
+  },
   { key: "sku", label: "Code suivi", type: "custom", render: skuCell },
   {
     key: "totalPrice",
@@ -69,7 +75,7 @@ const COLUMNS: Column[] = [
     sortable: true,
   },
   { key: "customer.name", label: "Destinataire", type: "who" },
-  { key: "address", label: "Adresse", type: "text" },
+  { key: "address", label: "Adresse", type: "text", maxWidth: 200 },
   { key: "phone", label: "Téléphone", type: "mono" },
   { key: "cityRaw", label: "Ville", type: "text" },
   {
