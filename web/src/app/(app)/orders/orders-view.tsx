@@ -62,8 +62,8 @@ import {
   updateOrderFieldAction,
 } from "./actions";
 
-/** Columns an operator can edit inline in the grid (phone + ville). */
-const EDITABLE_COLUMNS = new Set(["phone", "cityRaw"]);
+/** Columns an operator can edit inline in the grid. */
+const EDITABLE_COLUMNS = new Set(["phone", "cityRaw", "address"]);
 
 /** Whole-row tint by status (and purple for out-of-stock / empty orders). */
 const STATUS_ROW_TINT: Record<string, string> = {

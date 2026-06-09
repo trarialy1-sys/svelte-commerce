@@ -1,4 +1,30 @@
-import type { Column, ExportColumn, Filter, ModuleConfig } from "@/lib/module/types";
+import type {
+  Column,
+  ExportColumn,
+  Filter,
+  ModuleConfig,
+  Row,
+} from "@/lib/module/types";
+
+/** First-item helpers for the Produit / Code suivi columns (read order items). */
+interface OrderItemLite {
+  title?: string | null;
+  sku?: string | null;
+}
+function orderItems(row: Row): OrderItemLite[] {
+  return ((row as { items?: OrderItemLite[] }).items ?? []) as OrderItemLite[];
+}
+function productCell(row: Row): string {
+  const items = orderItems(row);
+  if (items.length === 0) return "—";
+  const first = items[0];
+  const extra = items.length > 1 ? ` +${items.length - 1}` : "";
+  return (first.title || first.sku || "—") + extra;
+}
+function skuCell(row: Row): string {
+  return orderItems(row)[0]?.sku || "—";
+}
+
 
 const STATUS_LABELS: Record<string, string> = {
   NOUVELLE: "Nouvelle",
@@ -30,31 +56,22 @@ const SOURCE_LABELS: Record<string, string> = {
   MANUAL: "Manuel",
 };
 
-const SOURCE_TONES: Record<string, string> = {
-  SHOPIFY: "violet",
-  IMPORT: "blue",
-  MANUAL: "neutral",
-};
-
 const COLUMNS: Column[] = [
-  { key: "code", label: "Référence", type: "mono", sortable: true },
-  { key: "customer.name", label: "Client", type: "who" },
-  { key: "phone", label: "Téléphone", type: "mono" },
-  { key: "cityRaw", label: "Ville", type: "text" },
-  {
-    key: "itemsCount",
-    label: "Articles",
-    type: "number",
-    align: "right",
-    sortable: true,
-  },
+  { key: "createdAt", label: "Date", type: "date", sortable: true },
+  { key: "code", label: "N°", type: "mono", sortable: true },
+  { key: "product", label: "Produit", type: "custom", render: productCell },
+  { key: "sku", label: "Code suivi", type: "custom", render: skuCell },
   {
     key: "totalPrice",
-    label: "Total",
+    label: "Prix",
     type: "money",
     align: "right",
     sortable: true,
   },
+  { key: "customer.name", label: "Destinataire", type: "who" },
+  { key: "address", label: "Adresse", type: "text" },
+  { key: "phone", label: "Téléphone", type: "mono" },
+  { key: "cityRaw", label: "Ville", type: "text" },
   {
     key: "status",
     label: "Statut",
@@ -62,14 +79,6 @@ const COLUMNS: Column[] = [
     badgeMap: STATUS_TONES,
     labelMap: STATUS_LABELS,
   },
-  {
-    key: "source",
-    label: "Source",
-    type: "badge",
-    badgeMap: SOURCE_TONES,
-    labelMap: SOURCE_LABELS,
-  },
-  { key: "createdAt", label: "Créée le", type: "date", sortable: true },
 ];
 
 const FILTERS: Filter[] = [
@@ -95,18 +104,21 @@ const FILTERS: Filter[] = [
 ];
 
 const EXPORT_COLUMNS: ExportColumn[] = [
-  { key: "code", label: "Référence" },
-  { key: "customer.name", label: "Client" },
+  { key: "createdAt", label: "Date" },
+  { key: "code", label: "N°" },
+  { key: "customer.name", label: "Destinataire" },
+  { key: "address", label: "Adresse" },
   { key: "phone", label: "Téléphone" },
   { key: "cityRaw", label: "Ville" },
-  { key: "itemsCount", label: "Articles" },
-  { key: "totalPrice", label: "Total" },
+  { key: "totalPrice", label: "Prix" },
   { key: "status", label: "Statut" },
   { key: "source", label: "Source" },
-  { key: "createdAt", label: "Créée le" },
 ];
 
-const INCLUDE = { customer: { select: { name: true } } };
+const INCLUDE = {
+  customer: { select: { name: true } },
+  items: { select: { title: true, sku: true } },
+};
 
 /** Build an Orders module config variant (shared columns, optional scoping). */
 function makeOrdersConfig(
