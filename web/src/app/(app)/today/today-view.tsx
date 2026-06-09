@@ -32,29 +32,24 @@ import {
 import type { BLResult } from "@/lib/shipping/bl";
 import { shipBatchAction, type ShipBatchResult } from "./actions";
 
-export interface TodayOrder {
+/** A confirmed order with no parcel yet — the only thing this board acts on. */
+export interface ReadyOrder {
   id: string;
   code: string;
   customer: string;
-  phone: string;
   cityRaw: string;
   total: number;
-  /** ISO timestamp deciding the batch: confirmation day (else import day). */
+  /** ISO confirmation day — decides which daily batch this belongs to. */
   dayAt: string;
-  bucket: "toConfirm" | "ready" | "shipped";
-  /** Ready orders only: city is resolved or confidently auto-detectable. */
+  /** City is resolved or confidently auto-detectable (else needs a fix). */
   cityOk: boolean;
-  tracking: string | null;
 }
 
 interface DayBatch {
   key: string;
   label: string;
   isToday: boolean;
-  toConfirm: TodayOrder[];
-  ready: TodayOrder[];
-  shipped: TodayOrder[];
-  /** Ready orders whose city still needs a manual fix. */
+  orders: ReadyOrder[];
   needCity: number;
   total: number;
 }
@@ -66,82 +61,69 @@ const DAY_FMT = new Intl.DateTimeFormat("fr-FR", {
   year: "numeric",
 });
 
-/** Local (operator timezone) YYYY-MM-DD key + a human label. */
-function dayOf(iso: string): { key: string; label: string } {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return { key: "—", label: "Sans date" };
-  const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate()
-  ).padStart(2, "0")}`;
-  const label = DAY_FMT.format(d);
-  return { key, label: label.charAt(0).toUpperCase() + label.slice(1) };
-}
-
-function todayKey(): string {
-  const d = new Date();
+function localKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
     d.getDate()
   ).padStart(2, "0")}`;
 }
 
-/** Bucket every order into its day, then split each day into the 3 columns. */
-function groupByDay(orders: TodayOrder[]): DayBatch[] {
-  const tk = todayKey();
+/** Bucket the ready orders into one card per confirmation day. */
+function groupByDay(orders: ReadyOrder[]): DayBatch[] {
+  const tk = localKey(new Date());
   const map = new Map<string, DayBatch>();
   for (const o of orders) {
-    const { key, label } = dayOf(o.dayAt);
+    const d = new Date(o.dayAt);
+    const key = Number.isNaN(d.getTime()) ? "—" : localKey(d);
     let batch = map.get(key);
     if (!batch) {
+      const label = Number.isNaN(d.getTime()) ? "Sans date" : DAY_FMT.format(d);
       batch = {
         key,
-        label,
+        label: label.charAt(0).toUpperCase() + label.slice(1),
         isToday: key === tk,
-        toConfirm: [],
-        ready: [],
-        shipped: [],
+        orders: [],
         needCity: 0,
         total: 0,
       };
       map.set(key, batch);
     }
-    if (o.bucket === "toConfirm") batch.toConfirm.push(o);
-    else if (o.bucket === "ready") {
-      batch.ready.push(o);
-      batch.total += o.total;
-      if (!o.cityOk) batch.needCity++;
-    } else batch.shipped.push(o);
+    batch.orders.push(o);
+    batch.total += o.total;
+    if (!o.cityOk) batch.needCity++;
   }
-  // Most recent day first.
   return [...map.values()].sort((a, b) => (a.key < b.key ? 1 : -1));
 }
 
 export function TodayView({
-  orders,
+  ready,
+  toConfirmCount,
+  shippedToday,
   role,
 }: {
-  orders: TodayOrder[];
+  ready: ReadyOrder[];
+  toConfirmCount: number;
+  shippedToday: number;
   role: AppRole | null;
 }) {
   const router = useRouter();
   const canWrite = meetsOrgRole(role, "operator");
 
-  const batches = React.useMemo(() => groupByDay(orders), [orders]);
+  const batches = React.useMemo(() => groupByDay(ready), [ready]);
 
   const [confirm, setConfirm] = React.useState<DayBatch | null>(null);
   const [stock, setStock] = React.useState(0);
   const [shipping, setShipping] = React.useState(false);
-  // Per-day outcome of the last ship (BL links + any failures), keyed by day.
-  const [outcome, setOutcome] = React.useState<
-    Record<string, ShipBatchResult>
-  >({});
+  const [outcome, setOutcome] = React.useState<Record<string, ShipBatchResult>>({});
 
   async function runShip() {
     if (!confirm) return;
     const batch = confirm;
-    const ids = batch.ready.map((o) => o.id);
     setShipping(true);
     try {
-      const r = await shipBatchAction(ids, stock);
+      const r = await shipBatchAction(
+        batch.orders.map((o) => o.id),
+        stock
+      );
       if (!r.ok) {
         toast.error(r.message);
         return;
@@ -170,17 +152,39 @@ export function TodayView({
     <>
       <PageHeader
         title="Lot du jour"
-        subtitle="Chaque jour est un lot : confirmez, puis expédiez tout en un clic (colis + BL)."
+        subtitle="Les commandes confirmées prêtes à partir — expédiez tout un lot et son BL en un clic."
       />
+
+      {/* Pipeline at a glance — counts only, real work links to its page. */}
+      <div className="mb-4 flex flex-wrap gap-2 text-sm">
+        <Link
+          href="/orders"
+          className="hover:bg-accent flex items-center gap-2 rounded-lg border px-3 py-2"
+        >
+          <PhoneCall className="text-blue size-4" />
+          <span className="text-muted-foreground">À confirmer</span>
+          <b>{toConfirmCount}</b>
+        </Link>
+        <span className="flex items-center gap-2 rounded-lg border px-3 py-2">
+          <Truck className="text-amber size-4" />
+          <span className="text-muted-foreground">Prêt à expédier</span>
+          <b>{ready.length}</b>
+        </span>
+        <span className="flex items-center gap-2 rounded-lg border px-3 py-2">
+          <CheckCircle2 className="text-green size-4" />
+          <span className="text-muted-foreground">Expédiées aujourd&apos;hui</span>
+          <b>{shippedToday}</b>
+        </span>
+      </div>
 
       {batches.length === 0 ? (
         <EmptyState
           icon={CalendarDays}
-          title="Aucun lot en cours"
-          message="Importez des commandes pour démarrer le lot du jour."
+          title="Aucune commande prête à expédier"
+          message="Confirmez des commandes dans Commandes — elles apparaîtront ici, prêtes à partir."
         />
       ) : (
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-4">
           {batches.map((batch) => (
             <BatchCard
               key={batch.key}
@@ -232,120 +236,52 @@ function BatchCard({
           </span>
         ) : null}
         <span className="text-muted-foreground text-sm">
-          {batch.ready.length} prêt(s) · {formatMoney(batch.total)}
+          {batch.orders.length} colis · {formatMoney(batch.total)}
         </span>
-        {canWrite && batch.ready.length > 0 ? (
+        {batch.needCity > 0 ? (
+          <Link
+            href="/shipping"
+            className="text-destructive inline-flex items-center gap-1 text-xs font-medium hover:underline"
+          >
+            <TriangleAlert className="size-3.5" />
+            {batch.needCity} ville(s) à corriger
+          </Link>
+        ) : null}
+        {canWrite ? (
           <Button size="sm" className="ml-auto" onClick={onShip}>
             <Send className="size-4" />
-            Expédier + BL ({batch.ready.length})
+            Expédier + BL ({batch.orders.length})
           </Button>
         ) : null}
       </header>
 
-      <div className="grid gap-px sm:grid-cols-3">
-        <Column
-          title="À confirmer"
-          icon={PhoneCall}
-          tone="text-blue"
-          orders={batch.toConfirm}
-          emptyHint="Rien à appeler."
-          footer={
-            batch.toConfirm.length > 0 ? (
-              <Link
-                href="/orders"
-                className="text-primary text-xs font-medium hover:underline"
-              >
-                Confirmer dans Commandes →
-              </Link>
-            ) : null
-          }
-        />
-        <Column
-          title="Prêt à expédier"
-          icon={Truck}
-          tone="text-amber"
-          orders={batch.ready}
-          emptyHint="Aucune commande prête."
-          footer={
-            batch.needCity > 0 ? (
-              <Link
-                href="/shipping"
-                className="text-destructive inline-flex items-center gap-1 text-xs font-medium hover:underline"
-              >
-                <TriangleAlert className="size-3.5" />
-                {batch.needCity} ville(s) à corriger →
-              </Link>
-            ) : null
-          }
-        />
-        <Column
-          title="Expédiées"
-          icon={CheckCircle2}
-          tone="text-green"
-          orders={batch.shipped}
-          emptyHint="Pas encore expédiées."
-        />
-      </div>
+      <ul className="divide-y">
+        {batch.orders.map((o) => (
+          <li
+            key={o.id}
+            className="flex items-center justify-between gap-3 px-4 py-2 text-sm"
+          >
+            <div className="min-w-0">
+              <span className="font-medium">{o.customer}</span>
+              <span className="text-muted-foreground ml-2 font-mono text-xs">
+                {o.code}
+              </span>
+            </div>
+            <div className="text-muted-foreground flex shrink-0 items-center gap-2 text-xs">
+              <span className="inline-flex items-center gap-1">
+                {!o.cityOk ? (
+                  <TriangleAlert className="text-destructive size-3.5" />
+                ) : null}
+                {o.cityRaw || "ville ?"}
+              </span>
+              <span className="text-foreground">{formatMoney(o.total)}</span>
+            </div>
+          </li>
+        ))}
+      </ul>
 
       {outcome ? <ShipOutcome outcome={outcome} /> : null}
     </section>
-  );
-}
-
-function Column({
-  title,
-  icon: Icon,
-  tone,
-  orders,
-  emptyHint,
-  footer,
-}: {
-  title: string;
-  icon: React.ComponentType<{ className?: string }>;
-  tone: string;
-  orders: TodayOrder[];
-  emptyHint: string;
-  footer?: React.ReactNode;
-}) {
-  return (
-    <div className="bg-background flex flex-col gap-2 p-3">
-      <div className="flex items-center gap-2 text-sm font-medium">
-        <Icon className={`size-4 ${tone}`} />
-        {title}
-        <span className="text-muted-foreground">({orders.length})</span>
-      </div>
-      {orders.length === 0 ? (
-        <p className="text-muted-foreground py-2 text-xs">{emptyHint}</p>
-      ) : (
-        <ul className="flex flex-col gap-1.5">
-          {orders.map((o) => (
-            <li
-              key={o.id}
-              className="bg-muted/40 rounded-md border px-2.5 py-1.5 text-sm"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="truncate font-medium">{o.customer}</span>
-                <span className="text-muted-foreground shrink-0 text-xs">
-                  {formatMoney(o.total)}
-                </span>
-              </div>
-              <div className="text-muted-foreground flex items-center gap-1.5 text-xs">
-                <span className="font-mono">{o.code}</span>
-                {o.tracking ? (
-                  <span className="font-mono">· {o.tracking}</span>
-                ) : (
-                  <span>· {o.cityRaw || "ville ?"}</span>
-                )}
-                {o.bucket === "ready" && !o.cityOk ? (
-                  <TriangleAlert className="text-destructive size-3" />
-                ) : null}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-      {footer ? <div className="mt-auto pt-1">{footer}</div> : null}
-    </div>
   );
 }
 
@@ -407,7 +343,7 @@ function ConfirmShipDialog({
         <DialogHeader>
           <DialogTitle>Expédier le lot ?</DialogTitle>
           <DialogDescription>
-            Crée {batch?.ready.length ?? 0} colis RÉELS chez OzonExpress (coût
+            Crée {batch?.orders.length ?? 0} colis RÉELS chez OzonExpress (coût
             réel) et génère un seul Bon de Livraison pour le lot
             {batch ? ` « ${batch.label} »` : ""}.
           </DialogDescription>
@@ -441,11 +377,7 @@ function ConfirmShipDialog({
         </div>
 
         <DialogFooter>
-          <Button
-            variant="ghost"
-            disabled={shipping}
-            onClick={() => onOpenChange(false)}
-          >
+          <Button variant="ghost" disabled={shipping} onClick={() => onOpenChange(false)}>
             Annuler
           </Button>
           <Button disabled={shipping} onClick={onConfirm}>
@@ -454,7 +386,7 @@ function ConfirmShipDialog({
             ) : (
               <Send className="size-4" />
             )}
-            Expédier {batch?.ready.length ?? 0} colis
+            Expédier {batch?.orders.length ?? 0} colis
           </Button>
         </DialogFooter>
       </DialogContent>
