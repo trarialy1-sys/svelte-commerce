@@ -6,6 +6,20 @@ All notable changes to this project are documented in this file.
 > This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0/) and [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
+## [Unreleased] - 2026-06-12
+
+### 🚀 New Features
+- **Lot du jour** — a daily board (`/today`) that groups confirmed orders into one batch card per confirmation day, each with a single **Expédier + BL** button that auto-resolves cities, creates the OzonExpress parcels, and generates one Bon de Livraison (with a confirmation dialog before the live send). (#70, #71)
+- Arabic city names (مكناس, الدار البيضاء, طنجة…) now resolve to the right Ozon catalog city, via a curated Moroccan-city dictionary plus a transliteration fallback; the manual city picker also accepts Arabic input. (#72)
+
+### 🔄 Improvements
+- City resolution now **auto-accepts** a correctly-detected city (exact / learned alias / Casa district / fuzzy word-match) — no manual "confirm" step before shipping. (#73)
+- Cities that don't match a real Ozon city (typo / far guess / none) are **blocked** from shipping with a clear "introuvable — à corriger" message and a one-click suggestion to fix, so an order is never shipped to a guessed city. (#73)
+
+### 🐛 Bug Fixes
+- Bon de Livraison creation now **fails loudly** if attaching parcels or saving the note errors at Ozon, instead of silently persisting an empty BL. (#69)
+
+---
 ## [4.0.0] - 2025-06-01
 
 ### 🚀 New Features
