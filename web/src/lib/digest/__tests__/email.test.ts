@@ -8,7 +8,7 @@ function summary(over: Partial<DigestSummary> = {}): DigestSummary {
     date: "2026-06-06",
     org: { name: "Acme", logoUrl: null, brandColor: "#C1542D", currency: "MAD", locale: "fr" },
     pulse: { newOrders: 5, confirmed: 3, shipped: 2, delivered: 1, returns: 0 },
-    attention: { aConfirmer: 4, problemes: 1, oos: 2 },
+    attention: { aConfirmer: 4, problemes: 1, oos: 2, aReappro: 3 },
     cod: { livreAEncaisser: 990, enAttente: 990 },
     isEmpty: false,
     ...over,

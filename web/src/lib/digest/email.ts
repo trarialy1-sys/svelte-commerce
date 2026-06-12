@@ -17,6 +17,7 @@ const T: Record<Lang, Record<string, string>> = {
     aConfirmer: "à confirmer",
     problemes: "colis en problème",
     oos: "articles en rupture",
+    aReappro: "à réapprovisionner",
     cod: "COD",
     livre: "Livré (à encaisser)",
     enAttente: "En attente de versement",
@@ -36,6 +37,7 @@ const T: Record<Lang, Record<string, string>> = {
     aConfirmer: "to confirm",
     problemes: "parcels in trouble",
     oos: "out-of-stock items",
+    aReappro: "to reorder",
     cod: "COD",
     livre: "Delivered (to collect)",
     enAttente: "Awaiting remittance",
@@ -63,6 +65,7 @@ export function renderDigest(s: DigestSummary, baseUrl: string): RenderedEmail {
     aConfirmer: url("/orders?status=NOUVELLE"),
     problemes: url("/shipping"),
     oos: url("/stock?stockState=RUPTURE"),
+    aReappro: url("/stock"),
   };
 
   // ── Plaintext ──────────────────────────────────────────────────────────────
@@ -81,6 +84,7 @@ export function renderDigest(s: DigestSummary, baseUrl: string): RenderedEmail {
     `  ${s.attention.aConfirmer} ${t.aConfirmer} — ${links.aConfirmer}`,
     `  ${s.attention.problemes} ${t.problemes} — ${links.problemes}`,
     `  ${s.attention.oos} ${t.oos} — ${links.oos}`,
+    `  ${s.attention.aReappro} ${t.aReappro} — ${links.aReappro}`,
     "",
     `${t.cod}:`,
     `  ${t.livre}: ${money(s.cod.livreAEncaisser)}`,
@@ -125,6 +129,7 @@ export function renderDigest(s: DigestSummary, baseUrl: string): RenderedEmail {
         ${actionRow(s.attention.aConfirmer, t.aConfirmer, links.aConfirmer)}
         ${actionRow(s.attention.problemes, t.problemes, links.problemes)}
         ${actionRow(s.attention.oos, t.oos, links.oos)}
+        ${actionRow(s.attention.aReappro, t.aReappro, links.aReappro)}
       </table>
 
       <h3 style="font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:#999;margin:20px 0 6px">${t.cod}</h3>

@@ -181,6 +181,11 @@ model Variant {
   status                 String   @default("active")
   // Computed at sync / stock write-back: EN_STOCK | FAIBLE | RUPTURE
   stockState             String   @default("EN_STOCK")
+  // Phase 4 — stock control on hero products.
+  isHero                 Boolean  @default(false) // flagship / fast-moving product
+  manualOOS              Boolean  @default(false) // operator-forced out of stock
+  reorderThreshold       Int?     // low-stock trigger (units); falls back to a global default
+  leadTimeDays           Int?     // restock lead time (China takes weeks)
   product                Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
   org                    Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
@@ -188,6 +193,7 @@ model Variant {
   @@index([orgId])
   @@index([orgId, sku])
   @@index([orgId, stockState])
+  @@index([orgId, isHero])
 }
 
 model Customer {

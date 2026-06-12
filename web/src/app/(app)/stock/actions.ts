@@ -32,6 +32,67 @@ export async function setStockAction(
   }
 }
 
+/** Flag/unflag variants as hero (flagship/fast-moving). Operator+. */
+export async function setHeroAction(
+  variantIds: string[],
+  hero: boolean
+): Promise<{ ok: boolean; updated?: number; message?: string }> {
+  const { orgId, userId } = await requireOrgRole("operator");
+  if (variantIds.length === 0) return { ok: false, message: "Aucune sélection" };
+  try {
+    const r = await getOrgDb(orgId!).variant.updateMany({
+      where: { id: { in: variantIds } },
+      data: { isHero: hero },
+    });
+    await getOrgDb(orgId!).auditLog.create({
+      data: {
+        orgId: orgId!,
+        actorUserId: userId,
+        action: "stock.hero",
+        entity: "Variant",
+        meta: { variantIds, hero, updated: r.count },
+      },
+    });
+    revalidatePath("/stock");
+    return { ok: true, updated: r.count };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Échec" };
+  }
+}
+
+/** Set per-variant reorder threshold + lead time (drives the reorder alert). Operator+. */
+export async function setReorderConfigAction(
+  variantId: string,
+  reorderThreshold: number | null,
+  leadTimeDays: number | null
+): Promise<{ ok: boolean; message?: string }> {
+  const { orgId, userId } = await requireOrgRole("operator");
+  try {
+    await getOrgDb(orgId!).variant.update({
+      where: { id: variantId },
+      data: {
+        reorderThreshold:
+          reorderThreshold != null && reorderThreshold >= 0 ? reorderThreshold : null,
+        leadTimeDays: leadTimeDays != null && leadTimeDays >= 0 ? leadTimeDays : null,
+      },
+    });
+    await getOrgDb(orgId!).auditLog.create({
+      data: {
+        orgId: orgId!,
+        actorUserId: userId,
+        action: "stock.reorder_config",
+        entity: "Variant",
+        entityId: variantId,
+        meta: { reorderThreshold, leadTimeDays },
+      },
+    });
+    revalidatePath("/stock");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Échec" };
+  }
+}
+
 export async function deleteVariantsAction(
   variantIds: string[]
 ): Promise<{ ok: boolean; deleted?: number; message?: string }> {
