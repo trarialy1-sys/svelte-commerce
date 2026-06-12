@@ -28,7 +28,16 @@ const STATUS_ORDER: Record<StockStatusKey, number> = {
 
 export default async function StockPage() {
   const { orgId, appRole } = await getAuthContext();
-  if (!orgId) return <StockView role={appRole} heroRows={[]} reorderRows={[]} />;
+  if (!orgId)
+    return (
+      <StockView
+        role={appRole}
+        heroRows={[]}
+        reorderRows={[]}
+        availableCount={0}
+        ruptureCount={0}
+      />
+    );
 
   const odb = getOrgDb(orgId);
   const delivered = await deliveredUnitsBySku(orgId);
@@ -39,7 +48,9 @@ export default async function StockPage() {
   const orClauses: Record<string, unknown>[] = [{ inventoryQty: { lte: 20 } }];
   if (skusWithSales.length) orClauses.push({ sku: { in: skusWithSales } });
 
-  const [heroes, attention] = await Promise.all([
+  const [availableCount, ruptureCount, heroes, attention] = await Promise.all([
+    odb.variant.count({ where: { stockState: { not: "RUPTURE" } } }),
+    odb.variant.count({ where: { stockState: "RUPTURE" } }),
     odb.variant.findMany({
       where: { isHero: true },
       orderBy: { inventoryQty: "asc" },
@@ -90,5 +101,13 @@ export default async function StockPage() {
     )
     .slice(0, 50);
 
-  return <StockView role={appRole} heroRows={heroRows} reorderRows={reorderRows} />;
+  return (
+    <StockView
+      role={appRole}
+      heroRows={heroRows}
+      reorderRows={reorderRows}
+      availableCount={availableCount}
+      ruptureCount={ruptureCount}
+    />
+  );
 }
