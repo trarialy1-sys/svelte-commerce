@@ -286,13 +286,16 @@ function BatchCard({
 }
 
 function ShipOutcome({ outcome }: { outcome: ShipBatchResult }) {
-  const failures = outcome.results.filter((r) => !r.ok && !r.usedBefore);
+  // Blocked (no real Ozon city) is kept separate from genuine API failures.
+  const blocked = outcome.results.filter((r) => r.blocked);
+  const failures = outcome.results.filter((r) => !r.ok && !r.usedBefore && !r.blocked);
   return (
     <div className="bg-muted/30 flex flex-col gap-2 border-t px-4 py-3 text-sm">
       <div className="flex flex-wrap items-center gap-3">
         <span className="font-medium">
           {outcome.sent} expédiée(s)
-          {outcome.failed > 0 ? ` · ${outcome.failed} échec(s)` : ""}
+          {blocked.length > 0 ? ` · ${blocked.length} bloquée(s)` : ""}
+          {failures.length > 0 ? ` · ${failures.length} échec(s)` : ""}
           {outcome.citiesResolved > 0
             ? ` · ${outcome.citiesResolved} ville(s) auto`
             : ""}
@@ -301,6 +304,22 @@ function ShipOutcome({ outcome }: { outcome: ShipBatchResult }) {
       </div>
       {outcome.blError ? (
         <p className="text-destructive text-xs">BL : {outcome.blError}</p>
+      ) : null}
+      {blocked.length > 0 ? (
+        <div className="text-amber flex flex-col gap-1 text-xs">
+          <span className="inline-flex items-center gap-1 font-medium">
+            <TriangleAlert className="size-3.5" />
+            Bloquées — ville introuvable chez Ozon :
+          </span>
+          {blocked.map((b) => (
+            <span key={b.orderId} className="text-muted-foreground">
+              <span className="font-mono">{b.code}</span> — {b.error}
+            </span>
+          ))}
+          <Link href="/shipping" className="font-medium underline">
+            Corriger les villes dans Livraisons →
+          </Link>
+        </div>
       ) : null}
       {failures.length > 0 ? (
         <ul className="flex flex-col gap-1">
@@ -370,8 +389,8 @@ function ConfirmShipDialog({
           {batch && batch.needCity > 0 ? (
             <p className="text-destructive flex items-center gap-1.5 text-xs">
               <TriangleAlert className="size-3.5" />
-              {batch.needCity} commande(s) sans ville confirmée pourraient
-              échouer — vous pourrez les corriger ensuite dans Livraisons.
+              {batch.needCity} commande(s) sans ville Ozon valide seront
+              bloquées (non expédiées) — corrigez-les dans Livraisons.
             </p>
           ) : null}
         </div>
