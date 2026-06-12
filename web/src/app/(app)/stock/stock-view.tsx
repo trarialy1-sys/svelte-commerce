@@ -9,7 +9,6 @@ import { meetsOrgRole, type AppRole } from "@/lib/auth/roles";
 import { PageHeader } from "@/components/page-header";
 import { DataTable } from "@/components/module/data-table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { StockControl, type StockRow } from "./stock-control";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -212,14 +211,10 @@ function StockBulkBar({
 
 export function StockView({
   role,
-  heroRows,
-  reorderRows,
   availableCount,
   ruptureCount,
 }: {
   role: AppRole | null;
-  heroRows: StockRow[];
-  reorderRows: StockRow[];
   availableCount: number;
   ruptureCount: number;
 }) {
@@ -245,12 +240,6 @@ export function StockView({
             </div>
           ) : null
         }
-      />
-
-      <StockControl
-        heroRows={heroRows}
-        reorderRows={reorderRows}
-        canWrite={canWrite}
       />
 
       <Tabs defaultValue="available">
