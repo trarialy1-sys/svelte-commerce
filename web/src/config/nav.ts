@@ -48,6 +48,7 @@ export const NAV: NavSection[] = [
       { label: "Clients", href: "/customers", icon: Users },
       { label: "Import", href: "/import", icon: Upload, minRole: "operator" },
       { label: "Finance", href: "/finance", icon: LineChart, minRole: "admin" },
+      { label: "Rentabilité", href: "/finance/products", icon: LineChart, minRole: "admin" },
     ],
   },
   {
