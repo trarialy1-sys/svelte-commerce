@@ -8,6 +8,7 @@ export const stockConfig: ModuleConfig = {
   columns: [
     { key: "sku", label: "SKU", type: "mono", sortable: true },
     { key: "title", label: "Produit", type: "text", sortable: true },
+    { key: "sold30", label: "Ventes 30j", type: "number", align: "right" },
     {
       key: "inventoryQty",
       label: "Quantité",
@@ -36,7 +37,9 @@ export const stockConfig: ModuleConfig = {
       ],
     },
   ],
-  defaultSort: { field: "inventoryQty", dir: "asc" },
+  // Default order: best-sellers first, out-of-stock last (see modules/stock/list.ts).
+  // `sold30` is a virtual column, so this never matches an explicit column click.
+  defaultSort: { field: "sold30", dir: "desc" },
   exportColumns: [
     { key: "sku", label: "SKU" },
     { key: "title", label: "Produit" },
