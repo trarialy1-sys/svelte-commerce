@@ -1,8 +1,8 @@
 import "server-only";
 
 import { ParcelStatus } from "@/generated/prisma/client";
-import { getOrgDb } from "@/lib/db";
-import { cityPriceMap, DEFAULT_DELIVERY_PRICE } from "@/lib/shipping/delivery-price";
+import { db, getOrgDb } from "@/lib/db";
+import { deliveryPriceForName, DEFAULT_DELIVERY_PRICE } from "@/lib/shipping/delivery-price";
 
 /**
  * Product P&L engine. Net profit per product over a period, for a COD business.
@@ -70,6 +70,14 @@ export interface ProductPnlRow {
   netPerDelivered: number; // clean
   netPerShipped: number; // blended — spreads failure cost
   cpa: number; // ad spend / shipped orders
+  // ── Decision guardrails (4.4) ──────────────────────────────────────────────
+  /** Delivery rate at which net = 0 (null = profitable at any rate; >1 = never). */
+  breakEvenDeliveryRate: number | null;
+  /** Highest ad CPA the product can sustain at its current delivery rate before
+   *  going to a loss (can be negative = loses money even with free ads). */
+  maxCpa: number | null;
+  /** True ROAS on collected (delivered) revenue, vs Meta's inflated revenue ROAS. */
+  deliveryAdjustedRoas: number | null;
 }
 
 export interface ProductPnlResult {
@@ -175,8 +183,11 @@ export function computeProductPnl(input: {
     for (const a of acc.values()) a.adSpend += accountLevel * (a.revenue / totalRevenue);
   }
 
-  const rows = [...acc.values()].map(finalize).sort((x, y) => y.net - x.net);
-  const totals = finalize(sumAcc([...acc.values()]));
+  const rf = settings.returnFee;
+  const rows = [...acc.values()]
+    .map((a) => finalize(a, rf))
+    .sort((x, y) => y.net - x.net);
+  const totals = finalize(sumAcc([...acc.values()]), rf);
   totals.sku = "__total__";
   totals.title = "Total";
   return { rows, totals };
@@ -222,24 +233,44 @@ function sumAcc(rows: Array<Parameters<typeof finalize>[0]>): Parameters<typeof 
   return t;
 }
 
-function finalize(a: {
-  sku: string;
-  title: string | null;
-  unitsDelivered: number;
-  unitsReturned: number;
-  deliveredOrders: number;
-  returnedOrders: number;
-  revenue: number;
-  cogs: number;
-  delivery: number;
-  returns: number;
-  codCommission: number;
-  adSpend: number;
-  confirmation: number;
-}): ProductPnlRow {
+function finalize(
+  a: {
+    sku: string;
+    title: string | null;
+    unitsDelivered: number;
+    unitsReturned: number;
+    deliveredOrders: number;
+    returnedOrders: number;
+    revenue: number;
+    cogs: number;
+    delivery: number;
+    returns: number;
+    codCommission: number;
+    adSpend: number;
+    confirmation: number;
+  },
+  returnFee: number
+): ProductPnlRow {
   const net =
     a.revenue - a.cogs - a.delivery - a.returns - a.codCommission - a.adSpend - a.confirmation;
   const shipped = a.deliveredOrders + a.returnedOrders;
+  const deliveryRate = shipped > 0 ? a.deliveredOrders / shipped : 0;
+
+  // Decision guardrails. Per delivered order, margin before ads & return cost:
+  //   M = (revenue − cogs − delivery − cod − confirmation) / deliveredOrders
+  // Per shipped order:  net/ship = d·M − (1−d)·returnFee − CPA
+  let breakEvenDeliveryRate: number | null = null;
+  let maxCpa: number | null = null;
+  if (a.deliveredOrders > 0 && shipped > 0) {
+    const m =
+      (a.revenue - a.cogs - a.delivery - a.codCommission - a.confirmation) /
+      a.deliveredOrders;
+    const cpa = a.adSpend / shipped;
+    const denom = m + returnFee;
+    breakEvenDeliveryRate = denom > 0 ? (returnFee + cpa) / denom : null;
+    maxCpa = round2(deliveryRate * m - (1 - deliveryRate) * returnFee);
+  }
+
   return {
     sku: a.sku,
     title: a.title,
@@ -247,7 +278,7 @@ function finalize(a: {
     unitsReturned: a.unitsReturned,
     deliveredOrders: a.deliveredOrders,
     returnedOrders: a.returnedOrders,
-    deliveryRate: shipped > 0 ? a.deliveredOrders / shipped : 0,
+    deliveryRate,
     revenue: round2(a.revenue),
     cogs: round2(a.cogs),
     delivery: round2(a.delivery),
@@ -260,20 +291,107 @@ function finalize(a: {
     netPerDelivered: a.deliveredOrders > 0 ? round2(net / a.deliveredOrders) : 0,
     netPerShipped: shipped > 0 ? round2(net / shipped) : 0,
     cpa: shipped > 0 ? round2(a.adSpend / shipped) : 0,
+    breakEvenDeliveryRate,
+    maxCpa,
+    deliveryAdjustedRoas: a.adSpend > 0 ? round2(a.revenue / a.adSpend) : null,
   };
 }
 
 const DAY = 86_400_000;
 
-/** Load the data and compute the product P&L for an org over a period. */
-export async function getProductPnl(
+export interface CityPnlRow {
+  cityId: number | null;
+  cityName: string;
+  deliveredOrders: number;
+  returnedOrders: number;
+  deliveryRate: number;
+  revenue: number;
+  net: number; // fulfillment net (excludes ad spend — ads aren't city-attributable)
+  margin: number;
+}
+
+/** Net per city (fulfillment economics) — flags cities that bleed on returns. */
+export function computeCityPnl(input: {
+  parcels: PnlParcel[];
+  cityPrice: Map<number, number>;
+  products: Map<string, PnlProductMeta>;
+  settings: PnlSettings;
+  cityNames: Map<number, string>;
+}): CityPnlRow[] {
+  const { parcels, cityPrice, products, settings, cityNames } = input;
+  interface C {
+    cityId: number | null;
+    deliveredOrders: number;
+    returnedOrders: number;
+    revenue: number;
+    cost: number; // all costs except ad spend
+  }
+  const acc = new Map<string, C>();
+  const key = (id: number | null) => (id == null ? "none" : String(id));
+
+  for (const p of parcels) {
+    const k = key(p.cityId);
+    let c = acc.get(k);
+    if (!c) {
+      c = { cityId: p.cityId, deliveredOrders: 0, returnedOrders: 0, revenue: 0, cost: 0 };
+      acc.set(k, c);
+    }
+    const parcelRevenue = p.items.reduce((s, it) => s + it.qty * it.unitPrice, 0);
+    const cogs = p.items.reduce(
+      (s, it) => s + it.qty * (products.get(it.sku)?.landedCost ?? 0),
+      0
+    );
+    if (p.delivered) {
+      const deliveryFee = cityPrice.get(p.cityId ?? -1) ?? settings.defaultDeliveryPrice;
+      c.deliveredOrders += 1;
+      c.revenue += parcelRevenue;
+      c.cost +=
+        cogs +
+        deliveryFee +
+        (parcelRevenue * settings.codCommissionPct) / 100 +
+        settings.confirmationCostPerOrder;
+    } else {
+      c.returnedOrders += 1;
+      c.cost += settings.returnFee;
+    }
+  }
+
+  return [...acc.values()]
+    .map((c) => {
+      const shipped = c.deliveredOrders + c.returnedOrders;
+      const net = c.revenue - c.cost;
+      return {
+        cityId: c.cityId,
+        cityName: c.cityId != null ? cityNames.get(c.cityId) ?? `#${c.cityId}` : "Ville ?",
+        deliveredOrders: c.deliveredOrders,
+        returnedOrders: c.returnedOrders,
+        deliveryRate: shipped > 0 ? c.deliveredOrders / shipped : 0,
+        revenue: round2(c.revenue),
+        net: round2(net),
+        margin: c.revenue > 0 ? net / c.revenue : 0,
+      };
+    })
+    .sort((a, b) => a.net - b.net); // worst (most negative) first
+}
+
+interface PnlInputs {
+  parcels: PnlParcel[];
+  cityPrice: Map<number, number>;
+  cityNames: Map<number, string>;
+  products: Map<string, PnlProductMeta>;
+  settings: PnlSettings;
+  adSpend: PnlAdSpendItem[];
+}
+
+/** Fetch everything the engine needs for a period (one round of queries). */
+async function loadPnlInputs(
   orgId: string,
   period: { from: Date; to: Date }
-): Promise<ProductPnlResult> {
+): Promise<PnlInputs> {
   const odb = getOrgDb(orgId);
-  const [settings, cityPrice, parcels, variants, adSpends] = await Promise.all([
+  const [settings, cities, parcels, variants, adSpends] = await Promise.all([
     odb.financeSettings.findUnique({ where: { orgId } }),
-    cityPriceMap(),
+    db.cityCatalog.findMany({ select: { id: true, name: true } }),
     odb.parcel.findMany({
       where: {
         updatedAt: { gte: period.from, lte: period.to },
@@ -294,6 +412,13 @@ export async function getProductPnl(
       select: { amount: true, periodStart: true, periodEnd: true, variantId: true },
     }),
   ]);
+
+  const cityPrice = new Map<number, number>();
+  const cityNames = new Map<number, string>();
+  for (const c of cities) {
+    cityPrice.set(c.id, deliveryPriceForName(c.name));
+    cityNames.set(c.id, c.name);
+  }
 
   const products = new Map<string, PnlProductMeta>();
   const skuByVariantId = new Map<string, string>();
@@ -342,5 +467,23 @@ export async function getProductPnl(
     defaultDeliveryPrice: Number(settings?.shippingFeePerParcel ?? DEFAULT_DELIVERY_PRICE),
   };
 
-  return computeProductPnl({ parcels: pnlParcels, cityPrice, products, settings: pnlSettings, adSpend });
+  return { parcels: pnlParcels, cityPrice, cityNames, products, settings: pnlSettings, adSpend };
+}
+
+/** Product P&L for an org over a period. */
+export async function getProductPnl(
+  orgId: string,
+  period: { from: Date; to: Date }
+): Promise<ProductPnlResult> {
+  const i = await loadPnlInputs(orgId, period);
+  return computeProductPnl(i);
+}
+
+/** Both product + per-city P&L for the period (single fetch). */
+export async function getPnl(
+  orgId: string,
+  period: { from: Date; to: Date }
+): Promise<{ product: ProductPnlResult; cities: CityPnlRow[] }> {
+  const i = await loadPnlInputs(orgId, period);
+  return { product: computeProductPnl(i), cities: computeCityPnl(i) };
 }
