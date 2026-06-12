@@ -3,7 +3,7 @@
 import * as React from "react";
 
 import type { AppRole } from "@/lib/auth/roles";
-import type { ModuleConfig } from "@/lib/module/types";
+import type { ModuleConfig, Row } from "@/lib/module/types";
 import { PageHeader } from "@/components/page-header";
 import { DataTable } from "@/components/module/data-table";
 
@@ -12,6 +12,7 @@ interface ModulePageProps {
   role: AppRole | null;
   actions?: React.ReactNode;
   renderBulkExtra?: (ids: string[], clear: () => void) => React.ReactNode;
+  groupBy?: (row: Row) => { key: string; label: string } | null;
 }
 
 export function ModulePage({
@@ -19,6 +20,7 @@ export function ModulePage({
   role,
   actions,
   renderBulkExtra,
+  groupBy,
 }: ModulePageProps) {
   return (
     <>
@@ -28,7 +30,12 @@ export function ModulePage({
         actions={actions}
       />
       <React.Suspense fallback={null}>
-        <DataTable config={config} role={role} renderBulkExtra={renderBulkExtra} />
+        <DataTable
+          config={config}
+          role={role}
+          renderBulkExtra={renderBulkExtra}
+          groupBy={groupBy}
+        />
       </React.Suspense>
     </>
   );
