@@ -215,11 +215,19 @@ export function ShippingView({
     }
   }
 
+  // A row counts as resolved when it's been saved/picked OR the detection is
+  // confident (exact / alias / casa / fuzzy) — a correct city needs no confirm.
   function resolvedOf(row: ShippingRow): { id: number; name: string } | null {
     if (picks[row.id]) return picks[row.id];
     if (row.savedCityId != null)
       return { id: row.savedCityId, name: row.suggestedName };
+    if (row.suggestedId != null && CONFIDENT.has(row.method))
+      return { id: row.suggestedId, name: row.suggestedName };
     return null;
+  }
+  /** Truly persisted (operator-picked or already saved), vs auto-accepted. */
+  function isSaved(row: ShippingRow): boolean {
+    return Boolean(picks[row.id]) || row.savedCityId != null;
   }
 
   // Bulk auto-save only high-confidence detections; approx/guess need review.
@@ -686,10 +694,15 @@ export function ShippingView({
             <div className="flex flex-col gap-3">
               {rows.map((row) => {
                 const resolved = resolvedOf(row);
-                const tone = resolved ? "green" : METHOD_TONE[row.method] ?? "neutral";
-                const label = resolved
+                const saved = isSaved(row);
+                // Saved → "Résolue"; auto-accepted → show its detection method
+                // (Exacte / Mémorisée / …) so the team keeps the signal.
+                const tone = saved
+                  ? "green"
+                  : METHOD_TONE[row.method] ?? (resolved ? "green" : "neutral");
+                const label = saved
                   ? "Résolue"
-                  : METHOD_LABEL[row.method] ?? row.method;
+                  : METHOD_LABEL[row.method] ?? (resolved ? "Résolue" : row.method);
                 const canSelect = Boolean(resolved);
                 return (
                   <div

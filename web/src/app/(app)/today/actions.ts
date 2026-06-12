@@ -3,16 +3,11 @@
 import { revalidatePath } from "next/cache";
 
 import { requireOrgRole } from "@/lib/auth";
-import { getOrgDb } from "@/lib/db";
-import { getCityResolver } from "@/lib/shipping/resolve";
-import { learnCityAlias } from "@/lib/shipping/learn";
+import { persistConfidentCities } from "@/lib/shipping/auto-city";
 import { createParcelForOrder, type ParcelResult } from "@/lib/shipping/ozon";
 import { createDeliveryNote, type BLResult } from "@/lib/shipping/bl";
 
 type Result<T = unknown> = { ok: true; data: T } | { ok: false; message: string };
-
-/** City detections confident enough to auto-confirm without operator review. */
-const CONFIDENT = new Set(["alias", "exact", "casa", "fuzzy"]);
 
 export interface ShipBatchResult {
   results: ParcelResult[];
@@ -46,25 +41,10 @@ export async function shipBatchAction(
   }
 
   try {
-    const odb = getOrgDb(orgId!);
-
     // 1) Auto-confirm the cities we're confident about, so the team doesn't have
     //    to resolve them by hand first. Low-confidence ones are left for the
     //    Livraisons page and will simply fail send with a precise message.
-    const resolver = await getCityResolver(orgId!);
-    const unresolved = await odb.order.findMany({
-      where: { id: { in: ids }, cityId: null },
-      select: { id: true, cityRaw: true, address: true },
-    });
-    let citiesResolved = 0;
-    for (const o of unresolved) {
-      const r = resolver.closest(o.cityRaw ?? "", o.address ?? "");
-      if (r.cityId != null && CONFIDENT.has(r.method)) {
-        await odb.order.update({ where: { id: o.id }, data: { cityId: r.cityId } });
-        await learnCityAlias(orgId!, o.cityRaw ?? "", r.cityId, userId);
-        citiesResolved++;
-      }
-    }
+    const citiesResolved = await persistConfidentCities(orgId!, ids, userId);
 
     // 2) Create the real parcels, one at a time (so a single failure is isolated).
     const results: ParcelResult[] = [];

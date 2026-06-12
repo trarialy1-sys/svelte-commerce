@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getOrgDb } from "@/lib/db";
 import { requireOrgRole } from "@/lib/auth";
 import { learnCityAlias } from "@/lib/shipping/learn";
+import { persistConfidentCities } from "@/lib/shipping/auto-city";
 import { createParcelForOrder, type ParcelResult } from "@/lib/shipping/ozon";
 import { buildBLOnly, createDeliveryNote, type BLResult } from "@/lib/shipping/bl";
 import { syncParcelStatuses, type SyncResult } from "@/lib/shipping/status-sync";
@@ -89,6 +90,9 @@ export async function sendParcelsAction(
 ): Promise<Result<{ results: ParcelResult[] }>> {
   const { orgId, userId } = await requireOrgRole("operator");
   try {
+    // Auto-save confidently-detected cities so a correct name never needs a
+    // manual "confirm" before shipping.
+    await persistConfidentCities(orgId!, orderIds, userId);
     const results: ParcelResult[] = [];
     for (const id of orderIds) {
       results.push(
@@ -110,6 +114,9 @@ export async function retryOneAction(
 ): Promise<Result<ParcelResult>> {
   const { orgId, userId } = await requireOrgRole("operator");
   try {
+    if (!customTracking?.trim()) {
+      await persistConfidentCities(orgId!, [orderId], userId);
+    }
     const res = await createParcelForOrder(orgId!, orderId, {
       stock,
       tracking: customTracking?.trim() || undefined,
