@@ -97,9 +97,26 @@ export async function getDashboardSummary(
       where: { status: ParcelStatus.LIVRE, updatedAt: { gte: weekAgo } },
     }),
     odb.parcel.count({ where: { status: { in: PARCEL_PROBLEM } } }),
-    odb.variant.count({ where: { inventoryQty: { lte: 0 } } }),
     odb.variant.count({
-      where: { inventoryQty: { gt: 0, lte: LOW_STOCK_THRESHOLD } },
+      where: {
+        OR: [
+          { manualOOS: true },
+          {
+            AND: [
+              { tracked: true },
+              { continueSelling: false },
+              { inventoryQty: { lte: 0 } },
+            ],
+          },
+        ],
+      },
+    }),
+    odb.variant.count({
+      where: {
+        tracked: true,
+        continueSelling: false,
+        inventoryQty: { gt: 0, lte: LOW_STOCK_THRESHOLD },
+      },
     }),
     odb.customer.count(),
     odb.customer.count({ where: { createdAt: { gte: weekAgo } } }),

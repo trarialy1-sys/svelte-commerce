@@ -13,6 +13,8 @@ const SELECT = {
   inventoryQty: true,
   stockState: true,
   manualOOS: true,
+  tracked: true,
+  continueSelling: true,
 } as const;
 
 const CAP = 5000;
@@ -38,10 +40,13 @@ export async function listStock(
     inventoryQty: number;
     stockState: string;
     manualOOS: boolean;
+    tracked: boolean;
+    continueSelling: boolean;
   }): Row => ({
     ...v,
     sold30: velocity.get(v.sku) ?? 0,
-    oos: v.manualOOS || v.inventoryQty <= 0,
+    // Untracked or continue-selling variants are always available.
+    oos: v.manualOOS || (v.tracked && !v.continueSelling && v.inventoryQty <= 0),
   });
 
   // Explicit column sort → let the DB do it (and paginate there).

@@ -176,6 +176,7 @@ model Variant {
   freightCost            Decimal? @db.Decimal(10, 2) // inbound freight per unit (landed = cost + freightCost)
   inventoryQty           Int      @default(0)
   tracked                Boolean  @default(true)
+  continueSelling        Boolean  @default(false) // Shopify inventoryPolicy CONTINUE → sells when out of stock
   shopifyVariantId       String?
   shopifyInventoryItemId String?
   // Denormalized from Product so the flat module framework can search/sort/filter.

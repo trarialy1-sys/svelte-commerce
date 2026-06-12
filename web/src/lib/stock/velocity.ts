@@ -60,11 +60,23 @@ export function computeMetrics(opts: {
   days?: number;
   reorderThreshold?: number | null;
   leadTimeDays?: number | null;
+  /** Shopify inventory tracking; untracked = always available (never rupture). */
+  tracked?: boolean;
+  /** Shopify "continue selling when out of stock" — also always available. */
+  continueSelling?: boolean;
 }): StockMetrics {
   const days = opts.days ?? VELOCITY_WINDOW_DAYS;
   const velocityPerDay = opts.deliveredUnits / days;
+  const alwaysAvailable = opts.tracked === false || opts.continueSelling === true;
 
-  if (opts.manualOOS || opts.inventoryQty <= 0) {
+  if (opts.manualOOS) {
+    return { velocityPerDay, daysLeft: 0, status: "RUPTURE" };
+  }
+  if (alwaysAvailable) {
+    // Storefront keeps selling regardless of qty — qty is not meaningful.
+    return { velocityPerDay, daysLeft: null, status: "OK" };
+  }
+  if (opts.inventoryQty <= 0) {
     return { velocityPerDay, daysLeft: 0, status: "RUPTURE" };
   }
 
