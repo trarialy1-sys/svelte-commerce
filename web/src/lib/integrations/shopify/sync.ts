@@ -14,6 +14,7 @@ interface VariantNode {
   sku: string | null;
   price: string;
   inventoryQuantity: number | null;
+  inventoryPolicy: string | null;
   inventoryItem: { id: string; tracked: boolean | null } | null;
 }
 interface ProductNode {
@@ -39,7 +40,7 @@ query Products($cursor: String) {
       id title handle status
       featuredImage { url }
       variants(first: 100) {
-        nodes { id sku price inventoryQuantity inventoryItem { id tracked } }
+        nodes { id sku price inventoryQuantity inventoryPolicy inventoryItem { id tracked } }
       }
     }
   }
@@ -92,9 +93,11 @@ export async function syncCatalog(
 
       for (const v of p.variants.nodes) {
         const qty = v.inventoryQuantity ?? 0;
-        // Shopify "tracked = false" → always available on the site, so it must
-        // not show as out of stock here regardless of the reported quantity.
+        // Always available on the storefront when tracking is off OR the policy
+        // is "continue selling when out of stock" — must not show as rupture.
         const tracked = v.inventoryItem?.tracked ?? true;
+        const continueSelling = v.inventoryPolicy === "CONTINUE";
+        const stockState = computeStockState(qty, tracked, continueSelling);
         await odb.variant.upsert({
           where: { orgId_shopifyVariantId: { orgId, shopifyVariantId: v.id } },
           create: {
@@ -106,9 +109,10 @@ export async function syncCatalog(
             price: v.price ?? "0",
             inventoryQty: qty,
             tracked,
+            continueSelling,
             title: p.title,
             status,
-            stockState: computeStockState(qty, tracked),
+            stockState,
           },
           update: {
             productId: product.id,
@@ -117,9 +121,10 @@ export async function syncCatalog(
             price: v.price ?? "0",
             inventoryQty: qty,
             tracked,
+            continueSelling,
             title: p.title,
             status,
-            stockState: computeStockState(qty, tracked),
+            stockState,
           },
         });
         variants++;

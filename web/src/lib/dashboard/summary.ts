@@ -101,12 +101,22 @@ export async function getDashboardSummary(
       where: {
         OR: [
           { manualOOS: true },
-          { AND: [{ tracked: true }, { inventoryQty: { lte: 0 } }] },
+          {
+            AND: [
+              { tracked: true },
+              { continueSelling: false },
+              { inventoryQty: { lte: 0 } },
+            ],
+          },
         ],
       },
     }),
     odb.variant.count({
-      where: { tracked: true, inventoryQty: { gt: 0, lte: LOW_STOCK_THRESHOLD } },
+      where: {
+        tracked: true,
+        continueSelling: false,
+        inventoryQty: { gt: 0, lte: LOW_STOCK_THRESHOLD },
+      },
     }),
     odb.customer.count(),
     odb.customer.count({ where: { createdAt: { gte: weekAgo } } }),

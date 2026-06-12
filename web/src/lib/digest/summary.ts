@@ -69,7 +69,13 @@ export async function buildDigest(orgId: string): Promise<DigestSummary> {
       where: {
         OR: [
           { manualOOS: true },
-          { AND: [{ tracked: true }, { inventoryQty: { lte: 0 } }] },
+          {
+            AND: [
+              { tracked: true },
+              { continueSelling: false },
+              { inventoryQty: { lte: 0 } },
+            ],
+          },
         ],
       },
     }),

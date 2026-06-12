@@ -8,10 +8,12 @@ export const LOW_STOCK_THRESHOLD = 5;
 
 export function computeStockState(
   qty: number,
-  tracked = true
+  tracked = true,
+  continueSelling = false
 ): "RUPTURE" | "FAIBLE" | "EN_STOCK" {
-  // Untracked variants are always available on the storefront — never rupture.
-  if (!tracked) return "EN_STOCK";
+  // Untracked or "continue selling when out of stock" → always available on the
+  // storefront, so never show rupture regardless of the reported quantity.
+  if (!tracked || continueSelling) return "EN_STOCK";
   if (qty <= 0) return "RUPTURE";
   if (qty <= LOW_STOCK_THRESHOLD) return "FAIBLE";
   return "EN_STOCK";

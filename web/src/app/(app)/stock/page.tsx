@@ -16,6 +16,7 @@ const SELECT = {
   reorderThreshold: true,
   leadTimeDays: true,
   tracked: true,
+  continueSelling: true,
 } as const;
 
 const STATUS_ORDER: Record<StockStatusKey, number> = {
@@ -61,6 +62,7 @@ export default async function StockPage() {
       reorderThreshold: v.reorderThreshold,
       leadTimeDays: v.leadTimeDays,
       tracked: v.tracked,
+      continueSelling: v.continueSelling,
     });
     return {
       id: v.id,
