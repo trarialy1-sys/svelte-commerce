@@ -14,6 +14,7 @@ import {
   ordersToConfirmConfig,
 } from "@/modules/orders/config";
 import { exportCustomers, listCustomers } from "@/modules/customers/list";
+import { listStock } from "@/modules/stock/list";
 import type { ListParams, ListResult, ModuleConfig, Row } from "./types";
 
 export interface BulkContext {
@@ -75,7 +76,7 @@ export const MODULE_REGISTRY: Record<string, RegistryEntry> = {
     bulkHandlers: { delete: deleteCustomers },
   },
   catalog: { config: catalogConfig, bulkHandlers: { delete: deleteVariants } },
-  stock: { config: stockConfig },
+  stock: { config: stockConfig, list: listStock },
   audit: { config: auditConfig },
   orders: { config: ordersConfig, bulkHandlers: orderBulkHandlers() },
   orders_confirm: {
