@@ -4,6 +4,7 @@ import { OrderStatus, ParcelStatus } from "@/generated/prisma/client";
 import { getOrgDb } from "@/lib/db";
 import { getOrgSettings } from "@/lib/org/settings";
 import { PARCEL_PROBLEM } from "@/lib/parcel-status";
+import { countReorderNeeded } from "@/lib/stock/velocity";
 import { startOfLocalDayUTC } from "@/lib/time";
 
 export interface DigestSummary {
@@ -22,7 +23,7 @@ export interface DigestSummary {
     delivered: number;
     returns: number;
   };
-  attention: { aConfirmer: number; problemes: number; oos: number };
+  attention: { aConfirmer: number; problemes: number; oos: number; aReappro: number };
   cod: { livreAEncaisser: number; enAttente: number };
   isEmpty: boolean;
 }
@@ -53,6 +54,7 @@ export async function buildDigest(orgId: string): Promise<DigestSummary> {
     aConfirmer,
     problemes,
     oos,
+    aReappro,
     livreAgg,
     verseAgg,
   ] = await Promise.all([
@@ -63,7 +65,8 @@ export async function buildDigest(orgId: string): Promise<DigestSummary> {
     odb.parcel.count({ where: { status: { in: PARCEL_PROBLEM }, updatedAt: win } }),
     odb.order.count({ where: { status: OrderStatus.NOUVELLE } }),
     odb.parcel.count({ where: { status: { in: PARCEL_PROBLEM } } }),
-    odb.variant.count({ where: { inventoryQty: { lte: 0 } } }),
+    odb.variant.count({ where: { OR: [{ inventoryQty: { lte: 0 } }, { manualOOS: true }] } }),
+    countReorderNeeded(orgId),
     odb.parcel.aggregate({
       _sum: { codPrice: true },
       where: { status: ParcelStatus.LIVRE },
@@ -75,10 +78,10 @@ export async function buildDigest(orgId: string): Promise<DigestSummary> {
   const verse = Number(verseAgg._sum.amount ?? 0);
 
   const pulse = { newOrders, confirmed, shipped, delivered, returns };
-  const attention = { aConfirmer, problemes, oos };
+  const attention = { aConfirmer, problemes, oos, aReappro };
   const isEmpty =
     newOrders + confirmed + shipped + delivered + returns === 0 &&
-    aConfirmer + problemes + oos === 0;
+    aConfirmer + problemes + oos + aReappro === 0;
 
   return {
     date,

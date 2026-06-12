@@ -2,11 +2,12 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, PackageX, RotateCcw, Trash2 } from "lucide-react";
+import { Loader2, PackageX, RotateCcw, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { meetsOrgRole, type AppRole } from "@/lib/auth/roles";
 import { ModulePage } from "@/components/module/module-page";
+import { StockControl, type StockRow } from "./stock-control";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -19,7 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { stockConfig } from "@/modules/stock/config";
 import { ScanDialog } from "./scan-dialog";
-import { deleteVariantsAction, setStockAction } from "./actions";
+import { deleteVariantsAction, setHeroAction, setStockAction } from "./actions";
 import { CsvImportButton } from "../products/csv-import-button";
 
 function StockBulkBar({
@@ -58,6 +59,20 @@ function StockBulkBar({
       const r = await setStockAction(ids, "rupture");
       if (r.ok) {
         toast.success(`${r.updated} article(s) en rupture`);
+        clear();
+        router.refresh();
+      } else toast.error(r.message ?? "Échec");
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function markHero() {
+    setPending("hero");
+    try {
+      const r = await setHeroAction(ids, true);
+      if (r.ok) {
+        toast.success(`${r.updated} produit(s) marqué(s) comme phare`);
         clear();
         router.refresh();
       } else toast.error(r.message ?? "Échec");
@@ -109,6 +124,19 @@ function StockBulkBar({
       >
         <RotateCcw className="size-4" />
         Réapprovisionner
+      </Button>
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={pending !== null}
+        onClick={markHero}
+      >
+        {pending === "hero" ? (
+          <Loader2 className="size-4 animate-spin" />
+        ) : (
+          <Star className="size-4" />
+        )}
+        Marquer phare
       </Button>
       {canDelete ? (
         <Button
@@ -180,29 +208,44 @@ function StockBulkBar({
   );
 }
 
-export function StockView({ role }: { role: AppRole | null }) {
+export function StockView({
+  role,
+  heroRows,
+  reorderRows,
+}: {
+  role: AppRole | null;
+  heroRows: StockRow[];
+  reorderRows: StockRow[];
+}) {
   const canWrite = meetsOrgRole(role, "operator");
   const canImport = meetsOrgRole(role, "admin");
   const canDelete = meetsOrgRole(role, "operator");
   return (
-    <ModulePage
-      config={stockConfig}
-      role={role}
-      actions={
-        canWrite || canImport ? (
-          <div className="flex items-center gap-2">
-            {canImport ? <CsvImportButton /> : null}
-            {canWrite ? <ScanDialog /> : null}
-          </div>
-        ) : null
-      }
-      renderBulkExtra={
-        canWrite
-          ? (ids, clear) => (
-              <StockBulkBar ids={ids} clear={clear} canDelete={canDelete} />
-            )
-          : undefined
-      }
-    />
+    <>
+      <StockControl
+        heroRows={heroRows}
+        reorderRows={reorderRows}
+        canWrite={canWrite}
+      />
+      <ModulePage
+        config={stockConfig}
+        role={role}
+        actions={
+          canWrite || canImport ? (
+            <div className="flex items-center gap-2">
+              {canImport ? <CsvImportButton /> : null}
+              {canWrite ? <ScanDialog /> : null}
+            </div>
+          ) : null
+        }
+        renderBulkExtra={
+          canWrite
+            ? (ids, clear) => (
+                <StockBulkBar ids={ids} clear={clear} canDelete={canDelete} />
+              )
+            : undefined
+        }
+      />
+    </>
   );
 }

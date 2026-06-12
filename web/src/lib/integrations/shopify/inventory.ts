@@ -21,7 +21,9 @@ mutation SetQuantities($input: InventorySetQuantitiesInput!) {
 
 /**
  * Set stock for variants at the org's primary location and write the change
- * back to Shopify. `rupture` → 0; `restock` → qty. Updates local Variant rows.
+ * back to Shopify. `rupture` → 0 (and `manualOOS`); `restock` → qty (clears
+ * `manualOOS`). The Shopify push is best-effort: orgs that import via Excel (no
+ * Shopify location) still get their local stock + OOS flag updated.
  */
 export async function setStock(
   orgId: string,
@@ -42,13 +44,9 @@ export async function setStock(
   });
   const locationId = (integ?.meta as { primaryLocationId?: string } | null)
     ?.primaryLocationId;
-  if (!locationId) {
-    throw new Error(
-      "Emplacement Shopify introuvable — lancez d'abord une synchronisation."
-    );
-  }
 
   const target = action === "rupture" ? 0 : Math.max(0, Math.floor(qty));
+  const manualOOS = action === "rupture";
 
   const quantities = variants
     .filter((v) => v.shopifyInventoryItemId)
@@ -58,7 +56,9 @@ export async function setStock(
       quantity: target,
     }));
 
-  if (quantities.length > 0) {
+  // Push to Shopify when connected (stops/restarts the website selling it);
+  // skip silently for non-Shopify orgs so the local OOS flag still works.
+  if (locationId && quantities.length > 0) {
     const { gql } = await getShopifyClient(orgId);
     const resp = await gql<{
       inventorySetQuantities: { userErrors: { message: string }[] };
@@ -78,7 +78,7 @@ export async function setStock(
 
   const res = await odb.variant.updateMany({
     where: { id: { in: variantIds } },
-    data: { inventoryQty: target, stockState: computeStockState(target) },
+    data: { inventoryQty: target, stockState: computeStockState(target), manualOOS },
   });
   return { updated: res.count };
 }
