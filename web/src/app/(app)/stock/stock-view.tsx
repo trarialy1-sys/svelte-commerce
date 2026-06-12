@@ -6,6 +6,7 @@ import { Loader2, PackageX, RotateCcw, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { meetsOrgRole, type AppRole } from "@/lib/auth/roles";
+import type { Row } from "@/lib/module/types";
 import { ModulePage } from "@/components/module/module-page";
 import { StockControl, type StockRow } from "./stock-control";
 import { Button } from "@/components/ui/button";
@@ -230,6 +231,11 @@ export function StockView({
       <ModulePage
         config={stockConfig}
         role={role}
+        groupBy={(row: Row) =>
+          row.oos
+            ? { key: "oos", label: "Rupture" }
+            : { key: "ok", label: "Disponible" }
+        }
         actions={
           canWrite || canImport ? (
             <div className="flex items-center gap-2">

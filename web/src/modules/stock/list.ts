@@ -49,34 +49,23 @@ export async function listStock(
     oos: v.manualOOS || (v.tracked && !v.continueSelling && v.inventoryQty <= 0),
   });
 
-  // Explicit column sort → let the DB do it (and paginate there).
-  if (params.sortField && params.sortField !== "sold30") {
-    const [variants, total] = await Promise.all([
-      odb.variant.findMany({
-        where,
-        orderBy: { [params.sortField]: params.sortDir },
-        skip: (params.page - 1) * params.pageSize,
-        take: params.pageSize,
-        select: SELECT,
-      }),
-      odb.variant.count({ where }),
-    ]);
-    return {
-      rows: variants.map(decorate),
-      total,
-      page: params.page,
-      pageSize: params.pageSize,
-    };
-  }
-
-  // Default: best-sellers first, out-of-stock last (sort in memory on velocity).
+  // Always sort in memory so out-of-stock is grouped last regardless of the
+  // chosen column (keeps the "Disponible" / "Rupture" sections clean). Default
+  // (sold30 desc) = best-sellers first; a column click sets the secondary sort.
   const all = await odb.variant.findMany({ where, take: CAP, select: SELECT });
-  const rows = all.map(decorate).sort(
-    (a, b) =>
-      Number(a.oos) - Number(b.oos) || // in-stock before out-of-stock
-      (b.sold30 as number) - (a.sold30 as number) || // best-selling first
-      (b.inventoryQty as number) - (a.inventoryQty as number)
-  );
+  const field = params.sortField || "sold30";
+  const dir = params.sortDir === "asc" ? 1 : -1;
+  const rows = all.map(decorate).sort((a, b) => {
+    const byOos = Number(a.oos) - Number(b.oos); // in-stock (false) before OOS
+    if (byOos !== 0) return byOos;
+    const av = a[field];
+    const bv = b[field];
+    const c =
+      typeof av === "number" && typeof bv === "number"
+        ? av - bv
+        : String(av ?? "").localeCompare(String(bv ?? ""));
+    return c * dir;
+  });
 
   const start = (params.page - 1) * params.pageSize;
   return {
