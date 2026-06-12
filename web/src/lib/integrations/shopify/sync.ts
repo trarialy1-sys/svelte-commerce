@@ -14,7 +14,7 @@ interface VariantNode {
   sku: string | null;
   price: string;
   inventoryQuantity: number | null;
-  inventoryItem: { id: string } | null;
+  inventoryItem: { id: string; tracked: boolean | null } | null;
 }
 interface ProductNode {
   id: string;
@@ -39,7 +39,7 @@ query Products($cursor: String) {
       id title handle status
       featuredImage { url }
       variants(first: 100) {
-        nodes { id sku price inventoryQuantity inventoryItem { id } }
+        nodes { id sku price inventoryQuantity inventoryItem { id tracked } }
       }
     }
   }
@@ -92,6 +92,9 @@ export async function syncCatalog(
 
       for (const v of p.variants.nodes) {
         const qty = v.inventoryQuantity ?? 0;
+        // Shopify "tracked = false" → always available on the site, so it must
+        // not show as out of stock here regardless of the reported quantity.
+        const tracked = v.inventoryItem?.tracked ?? true;
         await odb.variant.upsert({
           where: { orgId_shopifyVariantId: { orgId, shopifyVariantId: v.id } },
           create: {
@@ -102,9 +105,10 @@ export async function syncCatalog(
             sku: v.sku || v.id,
             price: v.price ?? "0",
             inventoryQty: qty,
+            tracked,
             title: p.title,
             status,
-            stockState: computeStockState(qty),
+            stockState: computeStockState(qty, tracked),
           },
           update: {
             productId: product.id,
@@ -112,9 +116,10 @@ export async function syncCatalog(
             sku: v.sku || v.id,
             price: v.price ?? "0",
             inventoryQty: qty,
+            tracked,
             title: p.title,
             status,
-            stockState: computeStockState(qty),
+            stockState: computeStockState(qty, tracked),
           },
         });
         variants++;

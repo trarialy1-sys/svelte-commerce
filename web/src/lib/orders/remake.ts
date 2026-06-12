@@ -57,7 +57,7 @@ export async function getOrderDetail(
   const variants = skus.length
     ? await odb.variant.findMany({
         where: { sku: { in: skus } },
-        select: { sku: true, title: true, inventoryQty: true, manualOOS: true },
+        select: { sku: true, title: true, inventoryQty: true, manualOOS: true, tracked: true },
       })
     : [];
   const bySku = new Map(variants.map((v) => [v.sku, v]));
@@ -88,7 +88,7 @@ export async function getOrderDetail(
         qty: i.qty,
         unitPrice: Number(i.unitPrice),
         title: v?.title ?? null,
-        outOfStock: v ? v.inventoryQty <= 0 || v.manualOOS : false,
+        outOfStock: v ? v.manualOOS || (v.tracked && v.inventoryQty <= 0) : false,
       };
     }),
   };

@@ -65,7 +65,14 @@ export async function buildDigest(orgId: string): Promise<DigestSummary> {
     odb.parcel.count({ where: { status: { in: PARCEL_PROBLEM }, updatedAt: win } }),
     odb.order.count({ where: { status: OrderStatus.NOUVELLE } }),
     odb.parcel.count({ where: { status: { in: PARCEL_PROBLEM } } }),
-    odb.variant.count({ where: { OR: [{ inventoryQty: { lte: 0 } }, { manualOOS: true }] } }),
+    odb.variant.count({
+      where: {
+        OR: [
+          { manualOOS: true },
+          { AND: [{ tracked: true }, { inventoryQty: { lte: 0 } }] },
+        ],
+      },
+    }),
     countReorderNeeded(orgId),
     odb.parcel.aggregate({
       _sum: { codPrice: true },

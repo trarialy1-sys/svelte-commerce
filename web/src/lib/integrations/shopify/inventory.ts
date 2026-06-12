@@ -6,7 +6,12 @@ import { getShopifyClient } from "./client";
 
 export const LOW_STOCK_THRESHOLD = 5;
 
-export function computeStockState(qty: number): "RUPTURE" | "FAIBLE" | "EN_STOCK" {
+export function computeStockState(
+  qty: number,
+  tracked = true
+): "RUPTURE" | "FAIBLE" | "EN_STOCK" {
+  // Untracked variants are always available on the storefront — never rupture.
+  if (!tracked) return "EN_STOCK";
   if (qty <= 0) return "RUPTURE";
   if (qty <= LOW_STOCK_THRESHOLD) return "FAIBLE";
   return "EN_STOCK";

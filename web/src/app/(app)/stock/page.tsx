@@ -15,6 +15,7 @@ const SELECT = {
   isHero: true,
   reorderThreshold: true,
   leadTimeDays: true,
+  tracked: true,
 } as const;
 
 const STATUS_ORDER: Record<StockStatusKey, number> = {
@@ -59,6 +60,7 @@ export default async function StockPage() {
       deliveredUnits: delivered.get(v.sku) ?? 0,
       reorderThreshold: v.reorderThreshold,
       leadTimeDays: v.leadTimeDays,
+      tracked: v.tracked,
     });
     return {
       id: v.id,
