@@ -9,6 +9,7 @@ All notable changes to this project are documented in this file.
 ## [Unreleased] - 2026-06-12
 
 ### 🚀 New Features
+- **Decision tools** on `/finance/products` (owner/admin) — per-product **break-even delivery rate**, **max profitable CPA** (vs current), and **delivery-adjusted ROAS**, shown as guardrails in the product detail; plus a **per-city P&L** table (fulfillment economics) that flags net-negative cities in red. (Phase 4.4)
 - **P&L par produit** (`/finance/products`, owner/admin) — true net profit per product over a period: revenue → COGS → Ozon delivery (delivered only) → returns → COD commission → ad spend → confirmation → **net + margin %**. Surfaces **delivery rate**, **net per delivered vs per shipped (blended)**, and **CPA**, with a per-product cost waterfall. (Phase 4.3)
 - **Cost inputs for unit economics** (`/finance`, owner/admin) — per-product **landed cost** (China cost + inbound freight), **confirmation cost per order**, and **manual ad-spend** entry (per period, optionally per product). Plus OzonExpress **per-city delivery pricing** ingested from the published tariffs (888 cities; delivery billed only on delivered). Feeds the margin engine. (Phase 4.2)
 - **Stock control on hero products** (`/stock`) — flag flagship/fast-moving products; a one-click **Rupture/Réappro** toggle (also stops the Shopify site selling a sold-out product when connected); **velocity** (delivered units/day, 30d) and **days-of-stock-left** per product; a lead-time-aware **"à réapprovisionner"** list and a matching alert in the daily digest. (Phase 4.1)

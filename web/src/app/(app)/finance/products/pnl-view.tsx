@@ -5,7 +5,11 @@ import Link from "next/link";
 import { LineChart } from "lucide-react";
 
 import { formatMoney } from "@/lib/format";
-import type { ProductPnlResult, ProductPnlRow } from "@/lib/finance/product-pnl";
+import type {
+  CityPnlRow,
+  ProductPnlResult,
+  ProductPnlRow,
+} from "@/lib/finance/product-pnl";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { StatusBadge } from "@/components/status-badge";
@@ -31,10 +35,12 @@ export function ProductPnlView({
   currency,
   period,
   result,
+  cities,
 }: {
   currency: string;
   period: { kind: string; label: string };
   result: ProductPnlResult;
+  cities: CityPnlRow[];
 }) {
   const [detail, setDetail] = React.useState<ProductPnlRow | null>(null);
   const money = (n: number) => formatMoney(n, currency);
@@ -130,6 +136,54 @@ export function ProductPnlView({
           </table>
         </div>
       )}
+
+      {/* Per-city P&L — net-negative cities first */}
+      {cities.length > 0 ? (
+        <section className="mt-8">
+          <h2 className="mb-1 font-semibold">Rentabilité par ville</h2>
+          <p className="text-muted-foreground mb-3 text-sm">
+            Économie de livraison par ville (hors publicité). Les villes en perte
+            (souvent fort taux de retour) sont en rouge — à arbitrer ou passer en
+            prépaiement partiel.
+          </p>
+          <div className="overflow-x-auto rounded-xl border">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50 text-muted-foreground text-xs">
+                <tr>
+                  <th className="px-3 py-2 text-left font-medium">Ville</th>
+                  <th className="px-3 py-2 text-right font-medium">Livrées</th>
+                  <th className="px-3 py-2 text-right font-medium">Retours</th>
+                  <th className="px-3 py-2 text-right font-medium">Taux liv.</th>
+                  <th className="px-3 py-2 text-right font-medium">CA</th>
+                  <th className="px-3 py-2 text-right font-medium">Net</th>
+                  <th className="px-3 py-2 text-right font-medium">Marge</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {cities.slice(0, 60).map((c) => (
+                  <tr key={c.cityId ?? "none"} className={c.net < 0 ? "bg-destructive/5" : ""}>
+                    <td className="px-3 py-2 font-medium">{c.cityName}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{c.deliveredOrders}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{c.returnedOrders}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{pct(c.deliveryRate)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{money(c.revenue)}</td>
+                    <td
+                      className={`px-3 py-2 text-right font-medium tabular-nums ${
+                        c.net >= 0 ? "text-green" : "text-destructive"
+                      }`}
+                    >
+                      {money(c.net)}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {c.revenue > 0 ? pct(c.margin) : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
 
       <ProductDetailSheet
         row={detail}
@@ -232,6 +286,39 @@ function ProductDetailSheet({
               « Net / expédiée » répartit le coût des échecs sur les commandes
               livrées — c&apos;est le profit réel par commande envoyée.
             </p>
+
+            {/* Decision guardrails (4.4) */}
+            <section className="flex flex-col gap-2 rounded-lg border p-3">
+              <h3 className="text-sm font-semibold">Repères de décision</h3>
+              <Guard
+                label="Taux de livraison — seuil de rentabilité"
+                current={pct(row.deliveryRate)}
+                target={
+                  row.breakEvenDeliveryRate == null
+                    ? "rentable à tout taux"
+                    : row.breakEvenDeliveryRate > 1
+                      ? "jamais rentable"
+                      : `seuil ${pct(row.breakEvenDeliveryRate)}`
+                }
+                good={
+                  row.breakEvenDeliveryRate == null ||
+                  (row.breakEvenDeliveryRate <= 1 &&
+                    row.deliveryRate >= row.breakEvenDeliveryRate)
+                }
+              />
+              <Guard
+                label="CPA — actuel vs maximum rentable"
+                current={money(row.cpa)}
+                target={row.maxCpa == null ? "—" : `max ${money(row.maxCpa)}`}
+                good={row.maxCpa != null && row.cpa <= row.maxCpa}
+              />
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">ROAS ajusté (livraison)</span>
+                <span className="font-medium tabular-nums">
+                  {row.deliveryAdjustedRoas != null ? `${row.deliveryAdjustedRoas}×` : "—"}
+                </span>
+              </div>
+            </section>
           </div>
         ) : null}
       </SheetContent>
@@ -259,6 +346,30 @@ function Line({
         }`}
       >
         {value}
+      </span>
+    </div>
+  );
+}
+
+function Guard({
+  label,
+  current,
+  target,
+  good,
+}: {
+  label: string;
+  current: string;
+  target: string;
+  good: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2 text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="flex items-center gap-2">
+        <span className="tabular-nums font-medium">{current}</span>
+        <span className={`text-xs ${good ? "text-green" : "text-destructive"}`}>
+          ({target})
+        </span>
       </span>
     </div>
   );

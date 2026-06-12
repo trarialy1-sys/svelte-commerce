@@ -44,6 +44,10 @@ describe("computeProductPnl", () => {
     expect(a.deliveryRate).toBeCloseTo(2 / 3, 4);
     expect(a.netPerDelivered).toBe(8.5);
     expect(a.netPerShipped).toBeCloseTo(17 / 3, 2);
+    // Decision guardrails: M=41/delivered, CPA=50/3, returnFee=15
+    expect(a.deliveryAdjustedRoas).toBe(4); // 200 / 50
+    expect(a.maxCpa).toBeCloseTo(22.33, 2); // (2/3)·41 − (1/3)·15
+    expect(a.breakEvenDeliveryRate!).toBeCloseTo(0.5655, 3); // (15+CPA)/(41+15)
   });
 
   it("falls back to the default delivery price for unknown cities", () => {
