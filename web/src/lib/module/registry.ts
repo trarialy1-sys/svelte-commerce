@@ -6,7 +6,11 @@ import { meetsOrgRole, type AppRole } from "@/lib/auth/roles";
 import { auditConfig } from "@/modules/audit/config";
 import { customersConfig } from "@/modules/customers/config";
 import { catalogConfig } from "@/modules/catalog/config";
-import { stockConfig } from "@/modules/stock/config";
+import {
+  stockConfig,
+  stockAvailableConfig,
+  stockRuptureConfig,
+} from "@/modules/stock/config";
 import {
   ordersConfig,
   ordersConfirmedConfig,
@@ -14,7 +18,7 @@ import {
   ordersToConfirmConfig,
 } from "@/modules/orders/config";
 import { exportCustomers, listCustomers } from "@/modules/customers/list";
-import { listStock } from "@/modules/stock/list";
+import { makeListStock } from "@/modules/stock/list";
 import type { ListParams, ListResult, ModuleConfig, Row } from "./types";
 
 export interface BulkContext {
@@ -76,7 +80,15 @@ export const MODULE_REGISTRY: Record<string, RegistryEntry> = {
     bulkHandlers: { delete: deleteCustomers },
   },
   catalog: { config: catalogConfig, bulkHandlers: { delete: deleteVariants } },
-  stock: { config: stockConfig, list: listStock },
+  stock: { config: stockConfig, list: makeListStock(stockConfig) },
+  stock_available: {
+    config: stockAvailableConfig,
+    list: makeListStock(stockAvailableConfig),
+  },
+  stock_rupture: {
+    config: stockRuptureConfig,
+    list: makeListStock(stockRuptureConfig),
+  },
   audit: { config: auditConfig },
   orders: { config: ordersConfig, bulkHandlers: orderBulkHandlers() },
   orders_confirm: {

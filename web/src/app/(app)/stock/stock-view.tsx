@@ -6,8 +6,9 @@ import { Loader2, PackageX, RotateCcw, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { meetsOrgRole, type AppRole } from "@/lib/auth/roles";
-import type { Row } from "@/lib/module/types";
-import { ModulePage } from "@/components/module/module-page";
+import { PageHeader } from "@/components/page-header";
+import { DataTable } from "@/components/module/data-table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StockControl, type StockRow } from "./stock-control";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,7 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { stockConfig } from "@/modules/stock/config";
+import { stockAvailableConfig, stockRuptureConfig } from "@/modules/stock/config";
 import { ScanDialog } from "./scan-dialog";
 import { deleteVariantsAction, setHeroAction, setStockAction } from "./actions";
 import { CsvImportButton } from "../products/csv-import-button";
@@ -213,29 +214,29 @@ export function StockView({
   role,
   heroRows,
   reorderRows,
+  availableCount,
+  ruptureCount,
 }: {
   role: AppRole | null;
   heroRows: StockRow[];
   reorderRows: StockRow[];
+  availableCount: number;
+  ruptureCount: number;
 }) {
   const canWrite = meetsOrgRole(role, "operator");
   const canImport = meetsOrgRole(role, "admin");
   const canDelete = meetsOrgRole(role, "operator");
+  const bulk = canWrite
+    ? (ids: string[], clear: () => void) => (
+        <StockBulkBar ids={ids} clear={clear} canDelete={canDelete} />
+      )
+    : undefined;
+
   return (
     <>
-      <StockControl
-        heroRows={heroRows}
-        reorderRows={reorderRows}
-        canWrite={canWrite}
-      />
-      <ModulePage
-        config={stockConfig}
-        role={role}
-        groupBy={(row: Row) =>
-          row.oos
-            ? { key: "oos", label: "Rupture" }
-            : { key: "ok", label: "Disponible" }
-        }
+      <PageHeader
+        title="Stock"
+        subtitle="Disponibilité, ruptures et réapprovisionnement."
         actions={
           canWrite || canImport ? (
             <div className="flex items-center gap-2">
@@ -244,14 +245,30 @@ export function StockView({
             </div>
           ) : null
         }
-        renderBulkExtra={
-          canWrite
-            ? (ids, clear) => (
-                <StockBulkBar ids={ids} clear={clear} canDelete={canDelete} />
-              )
-            : undefined
-        }
       />
+
+      <StockControl
+        heroRows={heroRows}
+        reorderRows={reorderRows}
+        canWrite={canWrite}
+      />
+
+      <Tabs defaultValue="available">
+        <TabsList>
+          <TabsTrigger value="available">Disponible ({availableCount})</TabsTrigger>
+          <TabsTrigger value="rupture">Rupture ({ruptureCount})</TabsTrigger>
+        </TabsList>
+        <TabsContent value="available">
+          <React.Suspense fallback={null}>
+            <DataTable config={stockAvailableConfig} role={role} renderBulkExtra={bulk} />
+          </React.Suspense>
+        </TabsContent>
+        <TabsContent value="rupture">
+          <React.Suspense fallback={null}>
+            <DataTable config={stockRuptureConfig} role={role} renderBulkExtra={bulk} />
+          </React.Suspense>
+        </TabsContent>
+      </Tabs>
     </>
   );
 }
