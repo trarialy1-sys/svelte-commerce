@@ -92,6 +92,7 @@ model Organization {
   auditLogs           AuditLog[]
   customerNotes       CustomerNote[]
   remittances         Remittance[]
+  adSpends            AdSpend[]
   emailLogs           EmailLog[]
 }
 
@@ -171,7 +172,8 @@ model Variant {
   productId              String
   sku                    String
   price                  Decimal  @db.Decimal(10, 2)
-  cost                   Decimal? @db.Decimal(10, 2)
+  cost                   Decimal? @db.Decimal(10, 2) // China unit cost
+  freightCost            Decimal? @db.Decimal(10, 2) // inbound freight per unit (landed = cost + freightCost)
   inventoryQty           Int      @default(0)
   tracked                Boolean  @default(true)
   shopifyVariantId       String?
@@ -381,6 +383,7 @@ model FinanceSettings {
   shippingFeePerParcel Decimal? @db.Decimal(10, 2)
   codCommissionPct     Decimal? @db.Decimal(5, 2)
   returnFee            Decimal? @db.Decimal(10, 2)
+  confirmationCostPerOrder Decimal? @db.Decimal(10, 2) // labour cost per order confirmed
   org                 Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 }
 
@@ -396,6 +399,30 @@ model Remittance {
   org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   @@index([orgId, date])
+}
+
+enum AdSpendSource {
+  MANUAL
+  META
+}
+
+// Ad spend logged per period, optionally per product (variantId null = account-level).
+// Manual entry now; Meta Marketing API later behind the same `source` seam.
+model AdSpend {
+  id          String        @id @default(cuid())
+  orgId       String
+  variantId   String? // null = account-level spend (not tied to one product)
+  amount      Decimal       @db.Decimal(12, 2)
+  periodStart DateTime
+  periodEnd   DateTime
+  source      AdSpendSource @default(MANUAL)
+  note        String?
+  createdById String? // Clerk user id
+  createdAt   DateTime      @default(now())
+  org         Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, periodStart])
+  @@index([orgId, variantId])
 }
 
 model AuditLog {
