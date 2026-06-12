@@ -130,6 +130,7 @@ describe("createParcelForOrder (mocked Ozon)", () => {
 
     const res = await createParcelForOrder(ORG, order.id);
     expect(res.ok).toBe(false);
-    expect(res.error).toMatch(/ville non résolue/i);
+    expect(res.blocked).toBe(true);
+    expect(res.error).toMatch(/introuvable/i);
   });
 });

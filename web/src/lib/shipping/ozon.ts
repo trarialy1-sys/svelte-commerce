@@ -67,6 +67,8 @@ export interface ParcelResult {
   error?: string;
   /** Ozon says the tracking already exists → route to the BL-only path. */
   usedBefore?: boolean;
+  /** No real Ozon city match → blocked from shipping until corrected. */
+  blocked?: boolean;
 }
 
 interface SendOpts {
@@ -152,8 +154,17 @@ export async function createParcelForOrder(
   if (!order) return { orderId, code: "", ok: false, error: "Commande introuvable." };
 
   const code = order.code;
+  // Hard block: never ship to a guessed city. Only orders whose ville matches a
+  // real Ozon catalog city (saved cityId) get here; anything else is corrected
+  // first.
   if (order.cityId == null) {
-    return { orderId, code, ok: false, error: "Ville non résolue (cityId manquant)." };
+    return {
+      orderId,
+      code,
+      ok: false,
+      blocked: true,
+      error: `Ville « ${order.cityRaw ?? "?"} » introuvable chez OzonExpress — à corriger avant l'envoi.`,
+    };
   }
 
   // Pre-send check: fail fast with a precise message instead of letting Ozon
