@@ -24,6 +24,7 @@ const TENANT_MODELS = new Set<string>([
   "NeighAlias",
   "FinanceSettings",
   "Remittance",
+  "AdSpend",
   "AuditLog",
   "EmailLog",
 ]);

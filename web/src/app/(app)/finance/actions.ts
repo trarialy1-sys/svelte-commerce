@@ -110,6 +110,141 @@ function parseFee(raw: string | undefined): Prisma.Decimal | null {
   return Number.isFinite(n) && n >= 0 ? new Prisma.Decimal(n) : null;
 }
 
+async function auditEntity(
+  orgId: string,
+  actorUserId: string | null | undefined,
+  action: string,
+  entity: string,
+  entityId: string | null,
+  meta: Prisma.InputJsonObject
+): Promise<void> {
+  await getOrgDb(orgId).auditLog.create({
+    data: { orgId, actorUserId: actorUserId ?? null, action, entity, entityId, meta },
+  });
+}
+
+/** Owner/admin: the per-order confirmation labour cost (its own write so the
+ *  fees form never clobbers it). */
+export async function updateConfirmationCostAction(input: {
+  confirmationCostPerOrder?: string;
+}): Promise<ActionResult> {
+  const { orgId, userId } = await guard();
+  const value = parseFee(input.confirmationCostPerOrder);
+  await getOrgDb(orgId).financeSettings.upsert({
+    where: { orgId },
+    create: { orgId, confirmationCostPerOrder: value },
+    update: { confirmationCostPerOrder: value },
+  });
+  await auditEntity(orgId, userId, "finance.confirmation_cost_updated", "FinanceSettings", null, {
+    confirmationCostPerOrder: value?.toString() ?? null,
+  });
+  revalidatePath("/finance");
+  return { ok: true };
+}
+
+// ── Ad spend (manual; Meta API later behind the same source seam) ────────────
+export async function addAdSpendAction(input: {
+  amount: string;
+  periodStart: string;
+  periodEnd: string;
+  variantId?: string | null;
+  note?: string;
+}): Promise<ActionResult> {
+  const { orgId, userId } = await guard();
+  const amount = parseAmount(input.amount);
+  const start = parseDate(input.periodStart);
+  const end = parseDate(input.periodEnd);
+  if (amount === null) return { ok: false, message: "Montant invalide." };
+  if (!start || !end) return { ok: false, message: "Période invalide." };
+  if (end < start) return { ok: false, message: "La date de fin précède le début." };
+
+  const r = await getOrgDb(orgId).adSpend.create({
+    data: {
+      orgId,
+      variantId: input.variantId?.trim() || null,
+      amount: new Prisma.Decimal(amount),
+      periodStart: start,
+      periodEnd: end,
+      note: input.note?.trim() || null,
+      createdById: userId,
+    },
+    select: { id: true },
+  });
+  await auditEntity(orgId, userId, "finance.adspend_added", "AdSpend", r.id, {
+    amount,
+    variantId: input.variantId ?? null,
+  });
+  revalidatePath("/finance");
+  return { ok: true };
+}
+
+export async function deleteAdSpendAction(input: { id: string }): Promise<ActionResult> {
+  const { orgId, userId } = await guard();
+  await getOrgDb(orgId).adSpend.delete({ where: { id: input.id } });
+  await auditEntity(orgId, userId, "finance.adspend_deleted", "AdSpend", input.id, {});
+  revalidatePath("/finance");
+  return { ok: true };
+}
+
+// ── Per-product landed cost (China cost + inbound freight) ────────────────────
+export interface VariantCostRow {
+  id: string;
+  sku: string;
+  title: string | null;
+  cost: number | null;
+  freightCost: number | null;
+  price: number;
+}
+
+export async function searchVariantCostsAction(
+  q: string
+): Promise<{ ok: true; rows: VariantCostRow[] } | { ok: false; message: string }> {
+  const { orgId } = await guard();
+  const term = q.trim();
+  const variants = await getOrgDb(orgId).variant.findMany({
+    where: term
+      ? {
+          OR: [
+            { sku: { contains: term, mode: "insensitive" } },
+            { title: { contains: term, mode: "insensitive" } },
+          ],
+        }
+      : {},
+    orderBy: [{ isHero: "desc" }, { sku: "asc" }],
+    take: 50,
+    select: { id: true, sku: true, title: true, cost: true, freightCost: true, price: true },
+  });
+  return {
+    ok: true,
+    rows: variants.map((v) => ({
+      id: v.id,
+      sku: v.sku,
+      title: v.title,
+      cost: v.cost != null ? Number(v.cost) : null,
+      freightCost: v.freightCost != null ? Number(v.freightCost) : null,
+      price: Number(v.price),
+    })),
+  };
+}
+
+export async function updateVariantCostAction(input: {
+  variantId: string;
+  cost?: string;
+  freightCost?: string;
+}): Promise<ActionResult> {
+  const { orgId, userId } = await guard();
+  await getOrgDb(orgId).variant.update({
+    where: { id: input.variantId },
+    data: { cost: parseFee(input.cost), freightCost: parseFee(input.freightCost) },
+  });
+  await auditEntity(orgId, userId, "finance.variant_cost_updated", "Variant", input.variantId, {
+    cost: input.cost ?? null,
+    freightCost: input.freightCost ?? null,
+  });
+  revalidatePath("/finance");
+  return { ok: true };
+}
+
 export async function updateFeesAction(input: {
   shippingFeePerParcel?: string;
   codCommissionPct?: string;

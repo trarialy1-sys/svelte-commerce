@@ -9,6 +9,7 @@ All notable changes to this project are documented in this file.
 ## [Unreleased] - 2026-06-12
 
 ### 🚀 New Features
+- **Cost inputs for unit economics** (`/finance`, owner/admin) — per-product **landed cost** (China cost + inbound freight), **confirmation cost per order**, and **manual ad-spend** entry (per period, optionally per product). Plus OzonExpress **per-city delivery pricing** ingested from the published tariffs (888 cities; delivery billed only on delivered). Feeds the margin engine. (Phase 4.2)
 - **Stock control on hero products** (`/stock`) — flag flagship/fast-moving products; a one-click **Rupture/Réappro** toggle (also stops the Shopify site selling a sold-out product when connected); **velocity** (delivered units/day, 30d) and **days-of-stock-left** per product; a lead-time-aware **"à réapprovisionner"** list and a matching alert in the daily digest. (Phase 4.1)
 - **Lot du jour** — a daily board (`/today`) that groups confirmed orders into one batch card per confirmation day, each with a single **Expédier + BL** button that auto-resolves cities, creates the OzonExpress parcels, and generates one Bon de Livraison (with a confirmation dialog before the live send). (#70, #71)
 - Arabic city names (مكناس, الدار البيضاء, طنجة…) now resolve to the right Ozon catalog city, via a curated Moroccan-city dictionary plus a transliteration fallback; the manual city picker also accepts Arabic input. (#72)
