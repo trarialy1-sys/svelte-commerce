@@ -9,6 +9,7 @@ All notable changes to this project are documented in this file.
 ## [Unreleased] - 2026-06-12
 
 ### 🚀 New Features
+- **Cash-flow & test/scale board** on `/finance/products` (owner/admin) — a **Trésorerie** snapshot (COD in transit, delivered awaiting remittance, already remitted, capital tied in stock) showing the COD cash-timing lag; and a per-product **verdict** badge (Scaler / Surveiller / Couper) derived from the profitability guardrails. (Phase 4.5)
 - **Decision tools** on `/finance/products` (owner/admin) — per-product **break-even delivery rate**, **max profitable CPA** (vs current), and **delivery-adjusted ROAS**, shown as guardrails in the product detail; plus a **per-city P&L** table (fulfillment economics) that flags net-negative cities in red. (Phase 4.4)
 - **P&L par produit** (`/finance/products`, owner/admin) — true net profit per product over a period: revenue → COGS → Ozon delivery (delivered only) → returns → COD commission → ad spend → confirmation → **net + margin %**. Surfaces **delivery rate**, **net per delivered vs per shipped (blended)**, and **CPA**, with a per-product cost waterfall. (Phase 4.3)
 - **Cost inputs for unit economics** (`/finance`, owner/admin) — per-product **landed cost** (China cost + inbound freight), **confirmation cost per order**, and **manual ad-spend** entry (per period, optionally per product). Plus OzonExpress **per-city delivery pricing** ingested from the published tariffs (888 cities; delivery billed only on delivered). Feeds the margin engine. (Phase 4.2)

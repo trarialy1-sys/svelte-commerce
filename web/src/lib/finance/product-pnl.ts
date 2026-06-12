@@ -78,6 +78,8 @@ export interface ProductPnlRow {
   maxCpa: number | null;
   /** True ROAS on collected (delivered) revenue, vs Meta's inflated revenue ROAS. */
   deliveryAdjustedRoas: number | null;
+  /** Test/scale verdict from the guardrails (NONE = nothing shipped yet). */
+  verdict: "SCALE" | "WATCH" | "KILL" | "NONE";
 }
 
 export interface ProductPnlResult {
@@ -271,6 +273,22 @@ function finalize(
     maxCpa = round2(deliveryRate * m - (1 - deliveryRate) * returnFee);
   }
 
+  // Test/scale verdict.
+  let verdict: ProductPnlRow["verdict"] = "NONE";
+  if (shipped > 0) {
+    const cpa = a.adSpend / shipped;
+    const belowBreakEven =
+      breakEvenDeliveryRate != null &&
+      breakEvenDeliveryRate <= 1 &&
+      deliveryRate < breakEvenDeliveryRate;
+    const cpaOverMax = maxCpa != null && a.adSpend > 0 && cpa > maxCpa;
+    const margin = a.revenue > 0 ? net / a.revenue : 0;
+    const tightCpa = maxCpa != null && maxCpa > 0 && a.adSpend > 0 && cpa > maxCpa * 0.8;
+    if (net < 0 || belowBreakEven || cpaOverMax) verdict = "KILL";
+    else if (margin < 0.1 || tightCpa) verdict = "WATCH";
+    else verdict = "SCALE";
+  }
+
   return {
     sku: a.sku,
     title: a.title,
@@ -294,6 +312,7 @@ function finalize(
     breakEvenDeliveryRate,
     maxCpa,
     deliveryAdjustedRoas: a.adSpend > 0 ? round2(a.revenue / a.adSpend) : null,
+    verdict,
   };
 }
 
