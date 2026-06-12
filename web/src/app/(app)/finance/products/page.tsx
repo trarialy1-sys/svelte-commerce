@@ -2,6 +2,7 @@ import { requireOrgRole } from "@/lib/auth";
 import { getOrgSettings } from "@/lib/org/settings";
 import { resolvePeriod } from "@/lib/finance/period";
 import { getPnl } from "@/lib/finance/product-pnl";
+import { getCashPosition } from "@/lib/finance/cashflow";
 import { ProductPnlView } from "./pnl-view";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +24,10 @@ export default async function ProductPnlPage({
     to: str(sp.to),
   });
 
-  const { product, cities } = await getPnl(orgId!, { from: period.from, to: period.to });
+  const [{ product, cities }, cash] = await Promise.all([
+    getPnl(orgId!, { from: period.from, to: period.to }),
+    getCashPosition(orgId!),
+  ]);
 
   return (
     <ProductPnlView
@@ -31,6 +35,7 @@ export default async function ProductPnlPage({
       period={{ kind: period.kind, label: period.label }}
       result={product}
       cities={cities}
+      cash={cash}
     />
   );
 }

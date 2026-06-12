@@ -48,6 +48,19 @@ describe("computeProductPnl", () => {
     expect(a.deliveryAdjustedRoas).toBe(4); // 200 / 50
     expect(a.maxCpa).toBeCloseTo(22.33, 2); // (2/3)·41 − (1/3)·15
     expect(a.breakEvenDeliveryRate!).toBeCloseTo(0.5655, 3); // (15+CPA)/(41+15)
+    expect(a.verdict).toBe("WATCH"); // net>0 but margin 8.5% < 10%
+  });
+
+  it("flags a loss-making product as KILL", () => {
+    const { rows } = computeProductPnl({
+      parcels: [{ delivered: true, cityId: 1, items: [{ sku: "A", qty: 1, unitPrice: 100 }] }],
+      cityPrice,
+      products,
+      settings,
+      adSpend: [{ sku: "A", amount: 200 }], // ad spend dwarfs the margin
+    });
+    expect(rows[0].net).toBeLessThan(0);
+    expect(rows[0].verdict).toBe("KILL");
   });
 
   it("falls back to the default delivery price for unknown cities", () => {

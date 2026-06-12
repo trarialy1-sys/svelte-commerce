@@ -10,6 +10,17 @@ import type {
   ProductPnlResult,
   ProductPnlRow,
 } from "@/lib/finance/product-pnl";
+import type { CashPosition } from "@/lib/finance/cashflow";
+
+const VERDICT: Record<
+  ProductPnlRow["verdict"],
+  { label: string; tone: "green" | "amber" | "red" | "neutral" }
+> = {
+  SCALE: { label: "Scaler", tone: "green" },
+  WATCH: { label: "Surveiller", tone: "amber" },
+  KILL: { label: "Couper", tone: "red" },
+  NONE: { label: "—", tone: "neutral" },
+};
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { StatusBadge } from "@/components/status-badge";
@@ -36,11 +47,13 @@ export function ProductPnlView({
   period,
   result,
   cities,
+  cash,
 }: {
   currency: string;
   period: { kind: string; label: string };
   result: ProductPnlResult;
   cities: CityPnlRow[];
+  cash: CashPosition;
 }) {
   const [detail, setDetail] = React.useState<ProductPnlRow | null>(null);
   const money = (n: number) => formatMoney(n, currency);
@@ -83,6 +96,21 @@ export function ProductPnlView({
         <Kpi label="Taux de livraison" value={pct(totals.deliveryRate)} />
       </div>
 
+      {/* Trésorerie — cash timing snapshot (not period-bound) */}
+      <div className="mb-6">
+        <h2 className="mb-1 font-semibold">Trésorerie</h2>
+        <p className="text-muted-foreground mb-2 text-sm">
+          Le COD rentre avec un décalage (livraison puis versement Ozon), alors que
+          la pub et le stock sont payés d&apos;avance.
+        </p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <Kpi label="COD en transit" value={money(cash.inTransitCod)} />
+          <Kpi label="Livré, à encaisser" value={money(cash.awaitingRemittance)} tone="green" />
+          <Kpi label="Déjà versé" value={money(cash.remitted)} />
+          <Kpi label="Capital en stock" value={money(cash.stockValue)} tone="red" />
+        </div>
+      </div>
+
       {rows.length === 0 ? (
         <EmptyState
           icon={LineChart}
@@ -102,6 +130,7 @@ export function ProductPnlView({
                 <th className="px-3 py-2 text-right font-medium">Marge</th>
                 <th className="px-3 py-2 text-right font-medium">Net/livrée</th>
                 <th className="px-3 py-2 text-right font-medium">CPA</th>
+                <th className="px-3 py-2 text-right font-medium">Verdict</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -130,6 +159,17 @@ export function ProductPnlView({
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{money(r.netPerDelivered)}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{money(r.cpa)}</td>
+                  <td className="px-3 py-2 text-right">
+                    {r.verdict !== "NONE" ? (
+                      <StatusBadge
+                        status={r.verdict}
+                        tone={VERDICT[r.verdict].tone}
+                        label={VERDICT[r.verdict].label}
+                      />
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
