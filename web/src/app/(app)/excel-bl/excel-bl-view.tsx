@@ -223,7 +223,9 @@ export function ExcelBLView() {
                 <tr>
                   <th className="px-3 py-2 text-left font-medium">Code suivi</th>
                   <th className="px-3 py-2 text-left font-medium">Destinataire</th>
+                  <th className="px-3 py-2 text-left font-medium">Adresse</th>
                   <th className="px-3 py-2 text-left font-medium">Ville</th>
+                  <th className="px-3 py-2 text-left font-medium">Produits</th>
                   <th className="px-3 py-2 text-right font-medium">Prix</th>
                   <th className="px-3 py-2 text-left font-medium">Ville Ozon</th>
                 </tr>
@@ -240,7 +242,26 @@ export function ExcelBLView() {
                         </div>
                       ) : null}
                     </td>
+                    <td className="text-muted-foreground max-w-[220px] px-3 py-2 text-xs">
+                      {row.address || "—"}
+                    </td>
                     <td className="px-3 py-2">{row.cityRaw || "—"}</td>
+                    <td className="px-3 py-2">
+                      {row.skus.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {row.skus.map((sku, i) => (
+                            <span
+                              key={`${sku}-${i}`}
+                              className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs"
+                            >
+                              {sku}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">—</span>
+                      )}
+                    </td>
                     <td className="px-3 py-2 text-right tabular-nums">
                       {formatMoney(row.price)}
                     </td>
