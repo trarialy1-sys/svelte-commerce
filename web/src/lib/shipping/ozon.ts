@@ -261,3 +261,79 @@ export async function createParcelForOrder(
     };
   }
 }
+
+export interface RawParcelInput {
+  /** Operator-supplied code suivi (from the Excel CODE SUIVI). */
+  tracking?: string;
+  receiver: string;
+  phone: string | null;
+  cityId: number;
+  address: string;
+  price: number;
+  note?: string | null;
+  products?: { ref: string; qnty: number }[];
+}
+
+/**
+ * Create one OzonExpress parcel from raw data (no local Order/Parcel row) — used
+ * by the standalone "Excel → BL" tool. Same add-parcel call + response parsing
+ * as createParcelForOrder, but nothing is persisted; the caller groups the
+ * returned tracking codes into a BL.
+ */
+export async function createParcelRaw(
+  orgId: string,
+  input: RawParcelInput
+): Promise<{
+  ok: boolean;
+  tracking?: string;
+  cityName?: string;
+  price?: string;
+  error?: string;
+  usedBefore?: boolean;
+}> {
+  const missing = missingShippingFields({
+    customerName: input.receiver,
+    phone: input.phone,
+    address: input.address,
+    price: input.price,
+  });
+  if (missing.length > 0) {
+    return { ok: false, error: `Champs manquants : ${missing.join(", ")}.` };
+  }
+
+  try {
+    const fd = new FormData();
+    if (input.tracking?.trim()) fd.append("tracking-number", input.tracking.trim());
+    fd.append("parcel-receiver", input.receiver);
+    fd.append("parcel-phone", formatPhone(input.phone));
+    fd.append("parcel-city", String(input.cityId));
+    fd.append("parcel-address", input.address);
+    fd.append("parcel-price", String(input.price));
+    fd.append("parcel-stock", "0"); // ramassage
+    if (input.note) fd.append("parcel-note", input.note);
+    if (input.products?.length) fd.append("products", JSON.stringify(input.products));
+
+    const { post } = await getOzonClient(orgId);
+    const j = await post("add-parcel", fd);
+
+    const tn = deepFindKey(j, "TRACKING-NUMBER");
+    if (tn) {
+      const cityName = deepFindKey(j, "CITY_NAME") ?? deepFindKey(j, "CITY-NAME");
+      const price = deepFindKey(j, "PRICE");
+      return {
+        ok: true,
+        tracking: String(tn),
+        cityName: cityName != null ? String(cityName) : undefined,
+        price: price != null ? String(price) : undefined,
+      };
+    }
+
+    const error = errMsg(j);
+    if (isUsedBefore(error)) {
+      return { ok: false, usedBefore: true, tracking: input.tracking, error };
+    }
+    return { ok: false, error };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Échec de l'envoi." };
+  }
+}
