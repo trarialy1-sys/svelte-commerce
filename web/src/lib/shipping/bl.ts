@@ -31,21 +31,19 @@ export async function createDeliveryNote(
   if (codes.length === 0) throw new Error("Aucun code de colis à grouper.");
   const { post } = await getOzonClient(orgId);
 
-  // 1) create the note
-  const j1 = await post("add-delivery-note", new FormData());
+  // 1) Create the note WITH its parcels in one call. OzonExpress's
+  //    add-delivery-note rejects an empty body ("veuillez ajouter au moins 1
+  //    colis") — the codes must be supplied here, not in a later step.
+  const fd1 = new FormData();
+  codes.forEach((c, i) => fd1.append(`Codes[${i}]`, c));
+  const j1 = await post("add-delivery-note", fd1);
+  if (ozonHasError(j1)) {
+    throw new Error(`Échec de création du BL — ${errMsg(j1)}`);
+  }
   const ref = findBLRef(j1);
   if (!ref) throw new Error(`Référence BL introuvable : ${errMsg(j1)}`);
 
-  // 2) attach the codes — fail loudly so we never persist an empty BL
-  const fd2 = new FormData();
-  fd2.append("Ref", ref);
-  codes.forEach((c, i) => fd2.append(`Codes[${i}]`, c));
-  const j2 = await post("add-parcel-to-delivery-note", fd2);
-  if (ozonHasError(j2)) {
-    throw new Error(`BL ${ref} : échec de l'ajout des colis — ${errMsg(j2)}`);
-  }
-
-  // 3) save it
+  // 2) Save / finalize it.
   const fd3 = new FormData();
   fd3.append("Ref", ref);
   const j3 = await post("save-delivery-note", fd3);
