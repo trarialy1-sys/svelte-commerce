@@ -2,13 +2,15 @@
 
 import * as XLSX from "xlsx";
 
+import { OrderSource, OrderStatus } from "@/generated/prisma/client";
 import { requireOrgRole } from "@/lib/auth";
 import { getOrgDb } from "@/lib/db";
 import { getCityResolver } from "@/lib/shipping/resolve";
 import { learnCityAlias } from "@/lib/shipping/learn";
 import { missingShippingFields } from "@/lib/shipping/validate";
-import { createParcelRaw } from "@/lib/shipping/ozon";
+import { createParcelForOrder } from "@/lib/shipping/ozon";
 import { createDeliveryNote, type BLResult } from "@/lib/shipping/bl";
+import { upsertCustomerFromOrder } from "@/lib/customers/upsert";
 import { parseCodeSuivi, parsePrice, restorePhone } from "@/lib/orders/parse";
 
 type Result<T> = { ok: true; data: T } | { ok: false; message: string };
@@ -128,10 +130,12 @@ export interface ExcelBLResult {
 }
 
 /**
- * ⚠️ LIVE: create the OzonExpress parcels for every row that has a resolved city,
- * then group them into one BL. Standalone — no Order/Parcel rows are written; only
- * the DeliveryNote is recorded. Rows without a city are blocked (never shipped to
- * a guess) and reported back.
+ * ⚠️ LIVE: for every row with a resolved city, persist a confirmed order +
+ * create its OzonExpress parcel, then group them into one BL. Orders are saved
+ * (status CONFIRMEE, source IMPORT) and parcels tracked — so once delivered they
+ * count in Finance / P&L / dashboard like any other shipment. Deduped by code
+ * (re-uploading the same file won't create duplicate orders). Rows without a
+ * resolved city are blocked (never shipped to a guess) and reported back.
  */
 export async function createExcelBLAction(
   rows: ExcelBLSendRow[]
@@ -140,6 +144,7 @@ export async function createExcelBLAction(
   if (!rows.length) return { ok: false, message: "Aucune ligne à expédier." };
 
   try {
+    const odb = getOrgDb(orgId!);
     const results: ExcelBLResult["results"] = [];
     const codes: string[] = [];
 
@@ -157,15 +162,59 @@ export async function createExcelBLAction(
       // Learn the alias so a fixed city is remembered next time.
       if (row.cityRaw) await learnCityAlias(orgId!, row.cityRaw, row.cityId, userId);
 
-      const res = await createParcelRaw(orgId!, {
+      // Persist the order (confirmed) so finance/P&L track it; dedupe by code.
+      const existing = await odb.order.findUnique({
+        where: { orgId_code: { orgId: orgId!, code: row.tracking } },
+        select: { id: true },
+      });
+      let orderId: string;
+      if (existing) {
+        orderId = existing.id;
+        await odb.order.update({
+          where: { id: orderId },
+          data: { cityId: row.cityId, status: OrderStatus.CONFIRMEE },
+        });
+      } else {
+        const customerId = await upsertCustomerFromOrder(orgId!, {
+          name: row.customer,
+          phone: row.phone,
+          city: row.cityRaw,
+        });
+        const unit = row.skus.length > 0 ? row.price / row.skus.length : 0;
+        const order = await odb.order.create({
+          data: {
+            orgId: orgId!,
+            code: row.tracking,
+            customerId,
+            cityRaw: row.cityRaw,
+            cityId: row.cityId,
+            address: row.address,
+            phone: row.phone,
+            totalPrice: row.price,
+            itemsCount: row.skus.length,
+            status: OrderStatus.CONFIRMEE,
+            source: OrderSource.IMPORT,
+            confirmedAt: new Date(),
+            confirmedById: userId,
+            note: row.note,
+            items: {
+              create: row.skus.map((sku) => ({
+                orgId: orgId!,
+                sku,
+                qty: 1,
+                unitPrice: unit,
+              })),
+            },
+          },
+          select: { id: true },
+        });
+        orderId = order.id;
+      }
+
+      const res = await createParcelForOrder(orgId!, orderId, {
         tracking: row.tracking,
-        receiver: row.customer,
-        phone: row.phone,
-        cityId: row.cityId,
-        address: row.address,
-        price: row.price,
-        note: row.note,
-        products: row.skus.map((sku) => ({ ref: sku, qnty: 1 })),
+        stock: 0,
+        actorUserId: userId,
       });
       if (res.ok || res.usedBefore) {
         const code = res.tracking || row.tracking;
