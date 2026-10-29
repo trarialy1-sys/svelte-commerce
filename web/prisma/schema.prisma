@@ -189,6 +189,12 @@ model Variant {
   manualOOS              Boolean  @default(false) // operator-forced out of stock
   reorderThreshold       Int?     // low-stock trigger (units); falls back to a global default
   leadTimeDays           Int?     // restock lead time (China takes weeks)
+  // Shopify variant title, e.g. "Noir / XL" (Variant.title holds the product title).
+  optionLabel            String?
+  // Physical count (Comptage, ported from the Google Sheet mobile app).
+  lastCountedAt          DateTime?
+  lastCountedBy          String?  // display name typed by the counter
+  countNote              String?
   product                Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
   org                    Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
