@@ -12,8 +12,8 @@ export default async function StockPage() {
 
   const odb = getOrgDb(orgId);
   const [availableCount, ruptureCount] = await Promise.all([
-    odb.variant.count({ where: { stockState: { not: "RUPTURE" } } }),
-    odb.variant.count({ where: { stockState: "RUPTURE" } }),
+    odb.variant.count({ where: { stockState: { not: "RUPTURE" }, status: { not: "deleted" } } }),
+    odb.variant.count({ where: { stockState: "RUPTURE", status: { not: "deleted" } } }),
   ]);
 
   return (

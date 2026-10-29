@@ -65,6 +65,9 @@ export async function syncCatalog(
   let cursor: string | null = null;
   let products = 0;
   let variants = 0;
+  // Variants seen in this full pass — anything else was deleted in Shopify.
+  const seenVariantIds: string[] = [];
+  const truncatedProductIds: string[] = [];
 
   do {
     const resp: ProductsResp = await gql<ProductsResp>(PRODUCTS_QUERY, {
@@ -131,8 +134,10 @@ export async function syncCatalog(
           },
         });
         variants++;
+        seenVariantIds.push(v.id);
       }
       if (p.variants.nodes.length >= 100) {
+        truncatedProductIds.push(product.id);
         console.warn(
           `[sync] product ${p.id} has >=100 variants; variant pagination skipped.`
         );
@@ -142,6 +147,20 @@ export async function syncCatalog(
       ? resp.products.pageInfo.endCursor
       : null;
   } while (cursor);
+
+  // Variants deleted in Shopify (SKU changed, variant removed) linger locally
+  // with stale quantities → flag them so stock & counting ignore them. Only
+  // after a complete pass, never for products whose variants were truncated.
+  if (seenVariantIds.length > 0) {
+    await odb.variant.updateMany({
+      where: {
+        shopifyVariantId: { not: null, notIn: seenVariantIds },
+        productId: { notIn: truncatedProductIds },
+        status: { not: "deleted" },
+      },
+      data: { status: "deleted" },
+    });
+  }
 
   // Persist primary location + last sync time in Integration.meta.
   const existing = await odb.integration.findUnique({
