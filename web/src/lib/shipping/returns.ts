@@ -18,6 +18,16 @@ import {
  *      those items from stock again (CORRIGE + note → claim at Ozon).
  */
 
+/**
+ * Auto-restock switch. OFF by default while the Google Sheet « Suivi Ozon »
+ * still restocks returns itself (both on → Shopify gets +2). Turn ON
+ * (`RETURNS_AUTO_RESTOCK=1` in Vercel) the day the sheet trigger is stopped.
+ * When OFF, returns are still detected and listed, stock is left alone.
+ */
+export function autoRestockEnabled(): boolean {
+  return /^(1|true|on|yes)$/i.test(process.env.RETURNS_AUTO_RESTOCK ?? "");
+}
+
 export const RETURN_CHECK = {
   PENDING: "A_VERIFIER",
   OK: "OK",
@@ -48,16 +58,29 @@ export async function restockReturnedParcel(
   const p = await parcelWithItems(orgId, parcelId);
   if (!p || p.restockedAt) return { restocked: false, results: [] };
 
-  const results = await adjustStockBySku(
-    orgId,
-    p.order.items.map((i) => ({ sku: i.sku, delta: Math.max(1, i.qty) })),
-    "received"
-  );
-
-  await odb.parcel.update({
-    where: { id: p.id },
+  // Claim the restock atomically first: two overlapping syncs (hourly job +
+  // manual refresh) must never both add the stock.
+  const claim = await odb.parcel.updateMany({
+    where: { id: p.id, restockedAt: null },
     data: { restockedAt: new Date(), returnCheck: RETURN_CHECK.PENDING },
   });
+  if (claim.count === 0) return { restocked: false, results: [] };
+
+  let results: StockDeltaResult[];
+  try {
+    results = await adjustStockBySku(
+      orgId,
+      p.order.items.map((i) => ({ sku: i.sku, delta: Math.max(1, i.qty) })),
+      "received"
+    );
+  } catch (e) {
+    // Nothing was written to Shopify → release the claim so the next run retries.
+    await odb.parcel.update({
+      where: { id: p.id },
+      data: { restockedAt: null, returnCheck: null },
+    });
+    throw e;
+  }
   await odb.auditLog.create({
     data: {
       orgId,
@@ -111,14 +134,9 @@ export async function correctReturn(
   if (items.length === 0) throw new Error("Coche au moins un article du colis.");
   if (!note.trim()) throw new Error("Écris une explication (ex. : produit pas à nous).");
 
-  const results = await adjustStockBySku(
-    orgId,
-    items.map((i) => ({ sku: i.sku, delta: -Math.max(1, i.qty) })),
-    "correction"
-  );
-
-  await odb.parcel.update({
-    where: { id: p.id },
+  // Claim the check first (double-click / two people on the same parcel).
+  const claim = await odb.parcel.updateMany({
+    where: { id: p.id, returnCheck: RETURN_CHECK.PENDING },
     data: {
       returnCheck: RETURN_CHECK.CORRECTED,
       returnCheckAt: new Date(),
@@ -126,6 +144,22 @@ export async function correctReturn(
       returnCheckNote: note.trim().slice(0, 500),
     },
   });
+  if (claim.count === 0) throw new Error("Ce retour a déjà été vérifié.");
+
+  let results: StockDeltaResult[];
+  try {
+    results = await adjustStockBySku(
+      orgId,
+      items.map((i) => ({ sku: i.sku, delta: -Math.max(1, i.qty) })),
+      "correction"
+    );
+  } catch (e) {
+    await odb.parcel.update({
+      where: { id: p.id },
+      data: { returnCheck: RETURN_CHECK.PENDING, returnCheckAt: null, returnCheckBy: null, returnCheckNote: null },
+    });
+    throw e;
+  }
   await odb.auditLog.create({
     data: {
       orgId,

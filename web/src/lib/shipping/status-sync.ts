@@ -5,7 +5,7 @@ import { getOrgDb } from "@/lib/db";
 import { getOzonClient, type OzonClient } from "./ozon";
 import { isReturnReceived, mapOzonStatus } from "./ozon-status-map";
 import { parseTracking, type OzonTracking } from "./ozon-tracking";
-import { restockReturnedParcel } from "./returns";
+import { autoRestockEnabled, restockReturnedParcel } from "./returns";
 
 // ── Live OzonExpress tracking call ───────────────────────────────────────────
 // POST customers/{id}/{key}/tracking, form-data `tracking-number` (confirmed
@@ -151,7 +151,7 @@ export async function syncParcelStatuses(
           // Restock only when we SAW the parcel before it came back (a known
           // earlier Ozon event): a parcel first seen already returned dates
           // from before this tracking existed — its stock was counted by hand.
-          if (received && p.ozonStatus != null) {
+          if (received && p.ozonStatus != null && autoRestockEnabled()) {
             const r = await restockReturnedParcel(orgId, p.id, opts.actorUserId ?? null);
             if (r.restocked) returnsRestocked++;
           }

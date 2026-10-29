@@ -1,13 +1,13 @@
 import { getAuthContext } from "@/lib/auth";
 import { getOrgDb } from "@/lib/db";
-import { RETURN_CHECK } from "@/lib/shipping/returns";
+import { autoRestockEnabled, RETURN_CHECK } from "@/lib/shipping/returns";
 import { ReturnsView, type ReturnRow } from "./returns-view";
 
 export const dynamic = "force-dynamic";
 
 export default async function ReturnsPage() {
   const { orgId, appRole } = await getAuthContext();
-  if (!orgId) return <ReturnsView rows={[]} done={[]} role={appRole} />;
+  if (!orgId) return <ReturnsView rows={[]} done={[]} role={appRole} auto={autoRestockEnabled()} />;
 
   const odb = getOrgDb(orgId);
   const select = {
@@ -74,5 +74,31 @@ export default async function ReturnsPage() {
     }),
   });
 
-  return <ReturnsView rows={pending.map(toRow)} done={recent.map(toRow)} role={appRole} />;
+  // While auto-restock is off (the Google Sheet still does it), list the
+  // returns Ozon handed back recently, read-only.
+  const received = autoRestockEnabled()
+    ? []
+    : await odb.parcel.findMany({
+        where: { returnReceivedAt: { not: null }, returnCheck: null },
+        select,
+        orderBy: { returnReceivedAt: "desc" },
+        take: 50,
+      });
+  const info2 = received.length
+    ? await odb.variant.findMany({
+        where: { sku: { in: [...new Set(received.flatMap((p) => p.order.items.map((i) => i.sku)))] } },
+        select: { sku: true, title: true, product: { select: { title: true, imageUrl: true } } },
+      })
+    : [];
+  for (const v of info2) if (!info.has(v.sku)) info.set(v.sku, v);
+
+  return (
+    <ReturnsView
+      rows={pending.map(toRow)}
+      done={recent.map(toRow)}
+      received={received.map(toRow)}
+      role={appRole}
+      auto={autoRestockEnabled()}
+    />
+  );
 }

@@ -165,11 +165,17 @@ function ReturnCard({ row, canAct }: { row: ReturnRow; canAct: boolean }) {
 export function ReturnsView({
   rows,
   done,
+  received = [],
   role,
+  auto,
 }: {
   rows: ReturnRow[];
   done: ReturnRow[];
+  /** Returns back at the merchant, not auto-restocked (switch off). */
+  received?: ReturnRow[];
   role: AppRole | null;
+  /** Auto-restock switch (RETURNS_AUTO_RESTOCK). */
+  auto: boolean;
 }) {
   const canAct = meetsOrgRole(role, "operator");
   return (
@@ -178,6 +184,31 @@ export function ReturnsView({
         title="Retours à vérifier"
         subtitle="Colis rendus par Ozon (« Reçu par client ») : le stock est déjà remis. Ouvre le colis et compare avec les photos — si un article n'est pas le bon, coche-le pour le retirer du stock."
       />
+
+      {!auto ? (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+          Remise en stock automatique <b>désactivée</b> dans Partner OS : c&apos;est encore la
+          feuille Google « Suivi Ozon » qui remet les retours en stock. Les retours reçus
+          s&apos;affichent ci-dessous en lecture seule.
+        </div>
+      ) : null}
+
+      {!auto && received.length > 0 ? (
+        <div className="divide-y rounded-xl border bg-card text-sm">
+          {received.map((r) => (
+            <div key={r.id} className="flex flex-wrap items-center gap-2 px-4 py-2">
+              <span className="font-mono">{r.tracking}</span>
+              <span className="text-muted-foreground">{r.order}</span>
+              <span className="text-muted-foreground">
+                {r.items.map((i) => i.sku).join(", ")}
+              </span>
+              <span className="ml-auto text-xs text-muted-foreground">
+                {r.ozonEventAt ?? DATE_FMT.format(new Date(r.returnedAt))}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {rows.length === 0 ? (
         <EmptyState

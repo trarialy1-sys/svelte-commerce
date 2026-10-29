@@ -51,6 +51,12 @@ Not set locally — the Inngest **Dev Server** is used in dev.
 | `SENTRY_AUTH_TOKEN` | Build-time source-map upload token. Unset → upload skipped. |
 | `LOG_LEVEL` | Optional pino level override (default `info`). |
 
+## Returns (Ozon)
+
+| Key | What |
+|-----|------|
+| `RETURNS_AUTO_RESTOCK` | `1` = when Ozon marks a parcel « Retourné · Reçu par client », put its items back in stock (Shopify + local) and list it in **Retours à vérifier**. Leave **unset** while the Google Sheet « Suivi Ozon » still restocks returns (both on → +2). |
+
 ## Legacy / optional
 
 | Key | What |
