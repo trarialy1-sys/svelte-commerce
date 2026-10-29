@@ -45,7 +45,8 @@ function makeStockConfig(
     // virtual column, so this never matches an explicit column click.
     defaultSort: { field: "sold30", dir: "desc" },
     exportColumns: EXPORT_COLUMNS,
-    ...(baseWhere ? { baseWhere } : {}),
+    // Variants deleted in Shopify are kept for history but hidden here.
+    baseWhere: { status: { not: "deleted" }, ...(baseWhere ?? {}) },
   };
 }
 

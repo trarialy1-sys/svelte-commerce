@@ -9,7 +9,7 @@ export default async function CountPage() {
   if (!orgId) return <CountView products={[]} role={appRole} />;
 
   const variants = await getOrgDb(orgId).variant.findMany({
-    where: { tracked: true },
+    where: { tracked: true, status: { not: "deleted" } },
     select: {
       id: true,
       sku: true,

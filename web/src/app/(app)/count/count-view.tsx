@@ -36,6 +36,16 @@ const NAME_KEY = "odes-count-name";
 
 const DATE_FMT = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short" });
 
+/** Shopify titles sometimes hold HTML entities (« &amp; »). */
+export function decodeEntities(s: string): string {
+  return s
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+}
+
 function norm(s: string): string {
   return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 }
@@ -237,7 +247,7 @@ export function CountView({ products, role }: { products: CountProduct[]; role: 
                     <div className="size-12 shrink-0 rounded-lg border bg-muted" />
                   )}
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">{p.title}</div>
+                    <div className="truncate text-sm font-medium">{decodeEntities(p.title)}</div>
                     <div className="text-xs text-muted-foreground">
                       {p.variants.length} variante{p.variants.length > 1 ? "s" : ""}
                       {left ? ` · ${left} à compter` : " · ✔ compté"}

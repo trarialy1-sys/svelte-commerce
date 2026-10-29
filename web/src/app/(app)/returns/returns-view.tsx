@@ -187,7 +187,7 @@ export function ReturnsView({
 
       {!auto ? (
         <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-          Remise en stock automatique <b>désactivée</b> dans Partner OS : c&apos;est encore la
+          Remise en stock automatique <b>désactivée</b>{" "}dans Partner OS : c&apos;est encore la
           feuille Google « Suivi Ozon » qui remet les retours en stock. Les retours reçus
           s&apos;affichent ci-dessous en lecture seule.
         </div>
