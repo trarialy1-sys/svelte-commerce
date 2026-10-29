@@ -3,54 +3,33 @@ import "server-only";
 import { ParcelStatus } from "@/generated/prisma/client";
 import { getOrgDb } from "@/lib/db";
 import { getOzonClient, type OzonClient } from "./ozon";
-import { mapOzonStatus } from "./ozon-status-map";
-
-// Terminal statuses are never re-polled — caps the work per run.
-const TERMINAL: ParcelStatus[] = [
-  ParcelStatus.LIVRE,
-  ParcelStatus.RETOURNE,
-  ParcelStatus.REFUSE,
-];
+import { isReturnReceived, mapOzonStatus } from "./ozon-status-map";
+import { parseTracking, type OzonTracking } from "./ozon-tracking";
+import { autoRestockEnabled, restockReturnedParcel } from "./returns";
 
 // ── Live OzonExpress tracking call ───────────────────────────────────────────
-// Endpoint confirmed: POST customers/{id}/{key}/tracking, form-data
-// `tracking-number`. Response: { CHECK_API:{RESULT}, TRACKING:{ RESULT,
-// LAST_TRACKING:{ STATUT }, HISTORY:{…} } }. Status lives at
-// TRACKING.LAST_TRACKING.STATUT (e.g. "Nouveau Colis").
-// NOTE: Ozon also supports bulk tracking (JSON array); we use per-parcel calls
-// (confirmed shape) batched + throttled — fine for current volume. Switching to
-// bulk is a future optimization if volume grows (→ Phase 3 territory).
+// POST customers/{id}/{key}/tracking, form-data `tracking-number` (confirmed
+// live — see ozon-tracking.ts for the response shape). Per-parcel calls,
+// batched + throttled — fine for current volume.
 export const LIVE_ENABLED = true;
 const OZON_TRACKING_PATH = "tracking";
 
-interface TrackingResponse {
-  CHECK_API?: { RESULT?: string; MESSAGE?: string };
-  TRACKING?: {
-    RESULT?: string;
-    LAST_TRACKING?: { STATUT?: string };
-  };
-}
+/** Stop polling a parcel this long after it was created (stale/lost). */
+const MAX_AGE_DAYS = 60;
 
-export type OzonStatusFetcher = (
+export type OzonTrackingFetcher = (
   client: OzonClient,
   tracking: string
-) => Promise<string | null>;
+) => Promise<OzonTracking | null>;
 
-/** Live fetcher — returns the parcel's current Ozon STATUT string, or null. */
-async function fetchOzonStatusLive(
+/** Live fetcher — the parcel's last Ozon event, or null when Ozon doesn't know it. */
+export async function fetchOzonTracking(
   client: OzonClient,
   tracking: string
-): Promise<string | null> {
+): Promise<OzonTracking | null> {
   const fd = new FormData();
   fd.append("tracking-number", tracking);
-  const j = (await client.post(OZON_TRACKING_PATH, fd)) as TrackingResponse;
-
-  if (j?.CHECK_API?.RESULT === "ERROR") {
-    throw new Error(j.CHECK_API.MESSAGE || "OzonExpress: clé API invalide.");
-  }
-  if (j?.TRACKING?.RESULT !== "SUCCESS") return null; // unknown/invalid tracking
-  const statut = j.TRACKING.LAST_TRACKING?.STATUT;
-  return statut ? String(statut) : null;
+  return parseTracking(await client.post(OZON_TRACKING_PATH, fd));
 }
 
 export interface SyncResult {
@@ -59,49 +38,74 @@ export interface SyncResult {
   updated: number;
   failed: number;
   byStatus: Record<string, number>;
+  /** Returns that came back to the merchant this run (auto-restocked). */
+  returnsRestocked: number;
   /** Per-parcel transitions this run (for parcel/status.changed events). */
   changes: Array<{ tracking: string; from: string; to: string }>;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+const EMPTY = (configured: boolean): SyncResult => ({
+  configured,
+  polled: 0,
+  updated: 0,
+  failed: 0,
+  byStatus: {},
+  returnsRestocked: 0,
+  changes: [],
+});
+
 /**
- * Poll OzonExpress for the current status of an org's **active** (non-terminal)
- * parcels and update those whose status changed. Idempotent + fault-tolerant:
- * a single parcel's failure never aborts the batch. Writes ONE summary AuditLog
- * row per run (not one per parcel).
+ * Poll OzonExpress for an org's **open** parcels and record their last event.
  *
- * Now driven by Inngest (3.1): scheduled fan-out per org, with retries +
- * concurrency limits. Stays idempotent so retries are safe.
+ * Open = not delivered, and not a return already back at the merchant. A
+ * refused parcel stays open: Ozon later marks it « Retourné » and, once it is
+ * physically back, adds the comment « Reçu par client » — at that moment the
+ * items go back in stock automatically (`restockReturnedParcel`, once) and the
+ * parcel waits for the warehouse check (Retours à vérifier).
+ *
+ * Idempotent + fault-tolerant: a single parcel's failure never aborts the
+ * batch. Writes ONE summary AuditLog row per run.
  */
 export async function syncParcelStatuses(
   orgId: string,
-  opts: { fetcher?: OzonStatusFetcher; actorUserId?: string | null } = {}
+  opts: { fetcher?: OzonTrackingFetcher; actorUserId?: string | null } = {}
 ): Promise<SyncResult> {
-  const fetcher = opts.fetcher ?? (LIVE_ENABLED ? fetchOzonStatusLive : null);
-  if (!fetcher) {
-    return { configured: false, polled: 0, updated: 0, failed: 0, byStatus: {}, changes: [] };
-  }
+  const fetcher = opts.fetcher ?? (LIVE_ENABLED ? fetchOzonTracking : null);
+  if (!fetcher) return EMPTY(false);
 
   const odb = getOrgDb(orgId);
+  const since = new Date(Date.now() - MAX_AGE_DAYS * 86_400_000);
   const parcels = await odb.parcel.findMany({
-    where: { status: { notIn: TERMINAL }, tracking: { not: null } },
-    select: { id: true, tracking: true, status: true },
+    where: {
+      tracking: { not: null },
+      status: { not: ParcelStatus.LIVRE },
+      returnReceivedAt: null,
+      createdAt: { gte: since },
+    },
+    select: {
+      id: true,
+      tracking: true,
+      status: true,
+      ozonStatus: true,
+      ozonComment: true,
+      ozonEventAt: true,
+    },
   });
-  if (parcels.length === 0) {
-    return { configured: true, polled: 0, updated: 0, failed: 0, byStatus: {}, changes: [] };
-  }
+  if (parcels.length === 0) return EMPTY(true);
 
   // Per-org credentials from the vault (server-only). Missing creds → not configured.
   let client: OzonClient;
   try {
     client = await getOzonClient(orgId);
   } catch {
-    return { configured: false, polled: 0, updated: 0, failed: 0, byStatus: {}, changes: [] };
+    return EMPTY(false);
   }
 
   let updated = 0;
   let failed = 0;
+  let returnsRestocked = 0;
   const byStatus: Record<string, number> = {};
   const changes: SyncResult["changes"] = [];
   const unknown = new Set<string>();
@@ -112,23 +116,45 @@ export async function syncParcelStatuses(
     await Promise.all(
       slice.map(async (p) => {
         try {
-          const raw = await fetcher(client, p.tracking as string);
-          if (raw == null) return;
-          const mapped = mapOzonStatus(raw);
+          const t = await fetcher(client, p.tracking as string);
+          if (!t) return;
+          const mapped = mapOzonStatus(t.status);
           if (!mapped) {
-            // Unknown vocabulary → leave unchanged (never guess); surface it.
-            unknown.add(raw);
-            console.warn(`[status-sync] unknown Ozon status "${raw}" (${p.tracking})`);
-            return;
+            // Unknown vocabulary → keep the enum, still record the raw event.
+            unknown.add(t.status);
+            console.warn(`[status-sync] unknown Ozon status "${t.status}" (${p.tracking})`);
           }
-          if (mapped === p.status) return; // no change
+          const received = isReturnReceived(t.status, t.comment);
+          const rawChanged =
+            t.status !== p.ozonStatus ||
+            t.comment !== p.ozonComment ||
+            t.eventAt !== p.ozonEventAt;
+          const enumChanged = mapped != null && mapped !== p.status;
+          if (!rawChanged && !enumChanged && !received) return;
+
           await odb.parcel.update({
             where: { id: p.id },
-            data: { status: mapped, lastStatusSyncAt: new Date() },
+            data: {
+              ...(enumChanged ? { status: mapped! } : {}),
+              ozonStatus: t.status,
+              ozonComment: t.comment || null,
+              ozonEventAt: t.eventAt,
+              lastStatusSyncAt: new Date(),
+              ...(received ? { returnReceivedAt: new Date() } : {}),
+            },
           });
-          updated++;
-          byStatus[mapped] = (byStatus[mapped] ?? 0) + 1;
-          changes.push({ tracking: p.tracking as string, from: p.status, to: mapped });
+          if (enumChanged) {
+            updated++;
+            byStatus[mapped!] = (byStatus[mapped!] ?? 0) + 1;
+            changes.push({ tracking: p.tracking as string, from: p.status, to: mapped! });
+          }
+          // Restock only when we SAW the parcel before it came back (a known
+          // earlier Ozon event): a parcel first seen already returned dates
+          // from before this tracking existed — its stock was counted by hand.
+          if (received && p.ozonStatus != null && autoRestockEnabled()) {
+            const r = await restockReturnedParcel(orgId, p.id, opts.actorUserId ?? null);
+            if (r.restocked) returnsRestocked++;
+          }
         } catch (e) {
           failed++;
           console.error(`[status-sync] parcel ${p.tracking} failed`, e);
@@ -138,7 +164,7 @@ export async function syncParcelStatuses(
     if (i + BATCH < parcels.length) await sleep(300); // throttle between batches
   }
 
-  if (updated > 0 || failed > 0 || unknown.size > 0) {
+  if (updated > 0 || failed > 0 || unknown.size > 0 || returnsRestocked > 0) {
     await odb.auditLog.create({
       data: {
         orgId,
@@ -150,6 +176,7 @@ export async function syncParcelStatuses(
           updated,
           failed,
           byStatus,
+          returnsRestocked,
           // Unmapped Ozon strings → add them to ozon-status-map.ts.
           ...(unknown.size > 0 ? { unknownStatuses: [...unknown].slice(0, 20) } : {}),
         },
@@ -157,5 +184,13 @@ export async function syncParcelStatuses(
     });
   }
 
-  return { configured: true, polled: parcels.length, updated, failed, byStatus, changes };
+  return {
+    configured: true,
+    polled: parcels.length,
+    updated,
+    failed,
+    byStatus,
+    returnsRestocked,
+    changes,
+  };
 }

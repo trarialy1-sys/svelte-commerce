@@ -189,6 +189,12 @@ model Variant {
   manualOOS              Boolean  @default(false) // operator-forced out of stock
   reorderThreshold       Int?     // low-stock trigger (units); falls back to a global default
   leadTimeDays           Int?     // restock lead time (China takes weeks)
+  // Shopify variant title, e.g. "Noir / XL" (Variant.title holds the product title).
+  optionLabel            String?
+  // Physical count (Comptage, ported from the Google Sheet mobile app).
+  lastCountedAt          DateTime?
+  lastCountedBy          String?  // display name typed by the counter
+  countNote              String?
   product                Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
   org                    Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
@@ -303,6 +309,23 @@ model Parcel {
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   lastStatusSyncAt DateTime?
+  // Raw OzonExpress tracking (last event) — the status enum alone loses detail
+  // like "Retourné · Reçu par client" (= the return is back at the merchant).
+  ozonStatus  String?
+  ozonComment String?
+  ozonEventAt String? // Ozon TIME_STR, e.g. "2026-10-28 14:03"
+  // How the parcel got here: APP (created by Partner OS) | DISCOVERED (shipped
+  // outside the app, e.g. the Google Sheet export, and matched at Ozon).
+  origin      String       @default("APP")
+  // Returns: Ozon handed the parcel back to the merchant.
+  returnReceivedAt DateTime?
+  // Stock was put back automatically (+qty per item) — never twice.
+  restockedAt      DateTime?
+  // Warehouse check of the returned contents: A_VERIFIER | OK | CORRIGE.
+  returnCheck      String?
+  returnCheckAt    DateTime?
+  returnCheckBy    String? // Clerk user id
+  returnCheckNote  String?
   order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
   dnLinks     DeliveryNoteParcel[]
   org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
@@ -310,6 +333,7 @@ model Parcel {
   @@index([orgId, status])
   // Reporting (3.2): delivered/returned by status-transition time (updatedAt).
   @@index([orgId, status, updatedAt])
+  @@index([orgId, returnCheck])
 }
 
 model DeliveryNote {

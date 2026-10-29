@@ -9,6 +9,7 @@ import { persistConfidentCities } from "@/lib/shipping/auto-city";
 import { createParcelForOrder, type ParcelResult } from "@/lib/shipping/ozon";
 import { buildBLOnly, createDeliveryNote, type BLResult } from "@/lib/shipping/bl";
 import { syncParcelStatuses, type SyncResult } from "@/lib/shipping/status-sync";
+import { discoverParcels } from "@/lib/shipping/discover";
 
 type Result<T = unknown> = { ok: true; data: T } | { ok: false; message: string };
 
@@ -18,6 +19,9 @@ type Result<T = unknown> = { ok: true; data: T } | { ok: false; message: string 
  */
 export async function syncStatusesAction(): Promise<Result<SyncResult>> {
   const { orgId, userId } = await requireOrgRole("operator");
+  // Also pick up parcels shipped from the Google Sheet export (small batch here;
+  // the hourly job covers the rest).
+  await discoverParcels(orgId!, { limit: 40 });
   const res = await syncParcelStatuses(orgId!, { actorUserId: userId });
   if (!res.configured) {
     return {
@@ -26,6 +30,7 @@ export async function syncStatusesAction(): Promise<Result<SyncResult>> {
     };
   }
   revalidatePath("/shipping");
+  revalidatePath("/returns");
   revalidatePath("/dashboard");
   return { ok: true, data: res };
 }

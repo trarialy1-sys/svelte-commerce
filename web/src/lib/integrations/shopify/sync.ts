@@ -10,6 +10,7 @@ interface LocationsResp {
 }
 
 interface VariantNode {
+  title?: string | null;
   id: string;
   sku: string | null;
   price: string;
@@ -40,7 +41,7 @@ query Products($cursor: String) {
       id title handle status
       featuredImage { url }
       variants(first: 100) {
-        nodes { id sku price inventoryQuantity inventoryPolicy inventoryItem { id tracked } }
+        nodes { id title sku price inventoryQuantity inventoryPolicy inventoryItem { id tracked } }
       }
     }
   }
@@ -111,6 +112,7 @@ export async function syncCatalog(
             tracked,
             continueSelling,
             title: p.title,
+            optionLabel: v.title && v.title !== "Default Title" ? v.title : null,
             status,
             stockState,
           },
@@ -123,6 +125,7 @@ export async function syncCatalog(
             tracked,
             continueSelling,
             title: p.title,
+            optionLabel: v.title && v.title !== "Default Title" ? v.title : null,
             status,
             stockState,
           },

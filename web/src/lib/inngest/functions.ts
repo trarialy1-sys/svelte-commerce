@@ -4,6 +4,8 @@ import { db, getOrgDb } from "@/lib/db";
 import { getOrgSettings } from "@/lib/org/settings";
 import { startOfLocalDayUTC } from "@/lib/time";
 import { syncParcelStatuses } from "@/lib/shipping/status-sync";
+import { discoverParcels } from "@/lib/shipping/discover";
+import { syncCatalog } from "@/lib/integrations/shopify/sync";
 import { importShopifyOrders } from "@/lib/orders/import-shopify";
 import { getCredentials } from "@/lib/integrations/vault";
 import { sendOrgDigest } from "@/lib/digest/send";
@@ -20,10 +22,10 @@ async function activeOrgIds(): Promise<string[]> {
 }
 
 // ── Parcel-status sync ───────────────────────────────────────────────────────
-// Scheduled every 2h (no Hobby cron limit on Inngest). The parent lists active
+// Scheduled every hour (no Hobby cron limit on Inngest). The parent lists active
 // orgs and fans out one event per org.
 const parcelSyncSchedule = inngest.createFunction(
-  { id: "parcel-sync-schedule", triggers: [{ cron: "0 */2 * * *" }] },
+  { id: "parcel-sync-schedule", triggers: [{ cron: "0 * * * *" }] },
   async ({ step }) => {
     const ids = await step.run("list-active-orgs", activeOrgIds);
     if (ids.length) {
@@ -51,6 +53,9 @@ const parcelSyncOrg = inngest.createFunction(
   async ({ event, step }) => {
     const { orgId } = event.data as AppEvents["parcel/sync.requested"];
     try {
+      // Parcels shipped outside the app (Google Sheet export) → attach first,
+      // so this same run tracks them too.
+      await step.run("discover", () => discoverParcels(orgId));
       const result = await step.run("sync", () => syncParcelStatuses(orgId));
       if (result.changes.length) {
         await step.sendEvent(
@@ -120,6 +125,49 @@ const shopifyImportOrg = inngest.createFunction(
   }
 );
 
+// ── Shopify catalog / stock sync ─────────────────────────────────────────────
+// Hourly pull of products, variants and stock quantities, so the Stock page
+// always shows what Shopify sells (sales, manual edits, returns).
+const catalogSyncSchedule = inngest.createFunction(
+  { id: "catalog-sync-schedule", triggers: [{ cron: "20 * * * *" }] },
+  async ({ step }) => {
+    const ids = await step.run("list-active-orgs", activeOrgIds);
+    if (ids.length) {
+      await step.sendEvent(
+        "fan-out",
+        ids.map((orgId) => ({
+          name: "shopify/catalog.requested",
+          data: { orgId } satisfies AppEvents["shopify/catalog.requested"],
+        }))
+      );
+    }
+    return { orgs: ids.length };
+  }
+);
+
+const catalogSyncOrg = inngest.createFunction(
+  {
+    id: "catalog-sync-org",
+    concurrency: { limit: 2 },
+    retries: 2,
+    triggers: [{ event: "shopify/catalog.requested" }],
+  },
+  async ({ event, step }) => {
+    const { orgId } = event.data as AppEvents["shopify/catalog.requested"];
+    const connected = await step.run("connected?", async () => {
+      const creds = await getCredentials(orgId, "SHOPIFY");
+      return Boolean(creds?.adminAccessToken);
+    });
+    if (!connected) return { skipped: "not-connected" as const };
+    try {
+      return await step.run("sync", () => syncCatalog(orgId));
+    } catch (err) {
+      await captureJobError("catalog-sync-org", err, orgId);
+      throw err;
+    }
+  }
+);
+
 // ── Owner daily digest ───────────────────────────────────────────────────────
 const digestSchedule = inngest.createFunction(
   // ≈ 07:30 Africa/Casablanca; the builder uses the org-tz day window.
@@ -173,6 +221,8 @@ export const functions = [
   parcelSyncOrg,
   shopifyImportSchedule,
   shopifyImportOrg,
+  catalogSyncSchedule,
+  catalogSyncOrg,
   digestSchedule,
   digestSendOrg,
 ];
