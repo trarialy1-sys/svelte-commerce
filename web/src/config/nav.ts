@@ -6,6 +6,7 @@ import {
   FileSpreadsheet,
   LayoutDashboard,
   LineChart,
+  PackageCheck,
   Package,
   Settings,
   ShieldCheck,
@@ -44,6 +45,7 @@ export const NAV: NavSection[] = [
       { label: "Lot du jour", href: "/today", icon: CalendarCheck },
       { label: "Commandes", href: "/orders", icon: ClipboardList },
       { label: "Livraisons & BL", href: "/shipping", icon: Truck },
+      { label: "Retours à vérifier", href: "/returns", icon: PackageCheck },
       {
         label: "Excel → BL",
         href: "/excel-bl",

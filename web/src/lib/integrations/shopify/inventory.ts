@@ -89,3 +89,115 @@ export async function setStock(
   });
   return { updated: res.count };
 }
+
+const ADJUST_QUANTITIES = `
+mutation AdjustQuantities($input: InventoryAdjustQuantitiesInput!) {
+  inventoryAdjustQuantities(input: $input) {
+    userErrors { field message }
+  }
+}`;
+
+export interface StockDelta {
+  sku: string;
+  /** Units to add (positive) or remove (negative). */
+  delta: number;
+}
+
+export interface StockDeltaResult {
+  sku: string;
+  ok: boolean;
+  delta: number;
+  /** Local quantity after the change (when the SKU is known). */
+  qty?: number;
+  error?: string;
+}
+
+/**
+ * Add / remove units by SKU (returns, corrections) — relative, so concurrent
+ * sales are never overwritten. Exact SKU match only (BRA-2-L never touches
+ * BRA-2-LL). Pushes to Shopify when connected (one inventoryAdjustQuantities
+ * call), then mirrors the change locally. An unknown SKU is reported, never
+ * guessed.
+ */
+export async function adjustStockBySku(
+  orgId: string,
+  deltas: StockDelta[],
+  reason: "received" | "correction" = "correction"
+): Promise<StockDeltaResult[]> {
+  const odb = getOrgDb(orgId);
+
+  // Merge duplicates (same SKU twice in one parcel).
+  const merged = new Map<string, number>();
+  for (const d of deltas) {
+    const sku = d.sku.trim();
+    if (!sku || !Number.isFinite(d.delta) || d.delta === 0) continue;
+    merged.set(sku, (merged.get(sku) ?? 0) + Math.trunc(d.delta));
+  }
+  const skus = [...merged.keys()];
+  if (skus.length === 0) return [];
+
+  const variants = await odb.variant.findMany({
+    where: { sku: { in: skus } },
+    select: {
+      id: true,
+      sku: true,
+      inventoryQty: true,
+      tracked: true,
+      continueSelling: true,
+      shopifyInventoryItemId: true,
+    },
+  });
+  const bySku = new Map<string, (typeof variants)[number]>();
+  for (const v of variants) if (!bySku.has(v.sku)) bySku.set(v.sku, v);
+
+  const integ = await odb.integration.findUnique({
+    where: { orgId_provider: { orgId, provider: IntegrationProvider.SHOPIFY } },
+    select: { meta: true },
+  });
+  const locationId = (integ?.meta as { primaryLocationId?: string } | null)
+    ?.primaryLocationId;
+
+  const results: StockDeltaResult[] = [];
+  const changes: { inventoryItemId: string; locationId: string; delta: number }[] = [];
+  for (const [sku, delta] of merged) {
+    const v = bySku.get(sku);
+    if (!v) {
+      results.push({ sku, ok: false, delta, error: "SKU inconnu" });
+      continue;
+    }
+    // Untracked variants always sell on Shopify: nothing to adjust there.
+    if (locationId && v.shopifyInventoryItemId && v.tracked) {
+      changes.push({ inventoryItemId: v.shopifyInventoryItemId, locationId, delta });
+    }
+    results.push({ sku, ok: true, delta });
+  }
+
+  if (changes.length > 0) {
+    const { gql } = await getShopifyClient(orgId);
+    const resp = await gql<{
+      inventoryAdjustQuantities: { userErrors: { message: string }[] };
+    }>(ADJUST_QUANTITIES, {
+      input: { name: "available", reason, changes },
+    });
+    const errs = resp.inventoryAdjustQuantities?.userErrors ?? [];
+    if (errs.length) {
+      throw new Error(`Shopify: ${errs.map((e) => e.message).join("; ")}`);
+    }
+  }
+
+  for (const r of results) {
+    if (!r.ok) continue;
+    const v = bySku.get(r.sku)!;
+    const qty = v.inventoryQty + r.delta;
+    await odb.variant.update({
+      where: { id: v.id },
+      data: {
+        inventoryQty: qty,
+        stockState: computeStockState(qty, v.tracked, v.continueSelling),
+        ...(qty > 0 ? { manualOOS: false } : {}),
+      },
+    });
+    r.qty = qty;
+  }
+  return results;
+}

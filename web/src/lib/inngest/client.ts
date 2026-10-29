@@ -20,4 +20,5 @@ export type AppEvents = {
   "digest/send.requested": { orgId: string };
   "order/confirmed": { orgId: string; orderId: string };
   "shopify/import.requested": { orgId: string };
+  "shopify/catalog.requested": { orgId: string };
 };
