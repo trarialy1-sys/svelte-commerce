@@ -4,7 +4,8 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db", () => ({ getOrgDb: vi.fn() }));
 vi.mock("../client", () => ({ getShopifyClient: vi.fn() }));
 
-import { decideFulfilment, fulfilOnShipEnabled } from "../fulfillment";
+import { ParcelStatus } from "@/generated/prisma/client";
+import { decideFulfilment, fulfilOnShipEnabled, isShipped } from "../fulfillment";
 
 describe("decideFulfilment", () => {
   it("fulfils every open fulfillment order", () => {
@@ -30,5 +31,16 @@ describe("fulfilOnShipEnabled", () => {
     process.env.FULFILL_ON_SHIP = "1";
     expect(fulfilOnShipEnabled()).toBe(true);
     delete process.env.FULFILL_ON_SHIP;
+  });
+});
+
+describe("isShipped", () => {
+  it("a parcel only created at Ozon is not shipped (item may turn out to be out of stock)", () => {
+    expect(isShipped(ParcelStatus.CREE)).toBe(false);
+  });
+  it("picked up or any later state counts as shipped", () => {
+    for (const st of [ParcelStatus.RAMASSE, ParcelStatus.EN_TRANSIT, ParcelStatus.LIVRE, ParcelStatus.REFUSE, ParcelStatus.RETOURNE]) {
+      expect(isShipped(st)).toBe(true);
+    }
   });
 });

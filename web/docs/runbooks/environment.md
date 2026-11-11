@@ -56,7 +56,7 @@ Not set locally — the Inngest **Dev Server** is used in dev.
 | Key | What |
 |-----|------|
 | `RETURNS_AUTO_RESTOCK` | `1` = when Ozon marks a parcel « Retourné · Reçu par client », put its items back in stock (Shopify + local) and list it in **Retours à vérifier**. Leave **unset** while the Google Sheet « Suivi Ozon » still restocks returns (both on → +2). |
-| `FULFILL_ON_SHIP` | `1` = when a parcel exists at Ozon, mark its Shopify order **fulfilled** (tracking = Ozon code, no customer e-mail) so reserved stock becomes a real deduction. Off by default. Needs Shopify reconnected once (new fulfilment scope). `FULFILL_ON_SHIP_DAYS` (default 20) bounds how far back it goes. |
+| `FULFILL_ON_SHIP` | `1` = when Ozon has **picked up** a parcel (not merely created), mark its Shopify order **fulfilled** (tracking = Ozon code, no customer e-mail) so reserved stock becomes a real deduction. Off by default. Needs Shopify reconnected once (new fulfilment scope). `FULFILL_ON_SHIP_DAYS` (default 20) bounds how far back it goes. |
 | `PACK_STOCK_SYNC` | Pack stock (variant SKU `A + B`) follows its scarcest piece after each catalog sync. **On by default**; `0` stops it. |
 
 ## Legacy / optional
