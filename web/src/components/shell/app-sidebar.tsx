@@ -1,7 +1,9 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ChevronRight } from "lucide-react";
 
 import { NAV, canSee } from "@/config/nav";
 import type { AppRole } from "@/lib/auth";
@@ -27,6 +29,11 @@ interface AppSidebarProps {
 export function AppSidebar({ orgName, role, isPlatformAdmin }: AppSidebarProps) {
   const pathname = usePathname();
   const initials = orgName.slice(0, 2).toUpperCase();
+  // Folded sections the user opened by hand (they also open on their own
+  // when the current page lives inside them).
+  const [opened, setOpened] = React.useState<Record<string, boolean>>({});
+  const isActive = (href: string) =>
+    pathname === href || pathname.startsWith(`${href}/`);
 
   return (
     <Sidebar collapsible="icon">
@@ -50,16 +57,38 @@ export function AppSidebar({ orgName, role, isPlatformAdmin }: AppSidebarProps) 
             canSee(i, role, isPlatformAdmin)
           );
           if (items.length === 0) return null;
+          const open =
+            !section.collapsed ||
+            (opened[section.label] ?? items.some((i) => isActive(i.href)));
           return (
             <SidebarGroup key={section.label}>
-              <SidebarGroupLabel>{section.label}</SidebarGroupLabel>
+              {section.collapsed ? (
+                <SidebarGroupLabel asChild>
+                  <button
+                    type="button"
+                    aria-expanded={open}
+                    onClick={() =>
+                      setOpened((o) => ({ ...o, [section.label]: !open }))
+                    }
+                    className="hover:text-sidebar-foreground flex w-full cursor-pointer items-center justify-between"
+                  >
+                    <span>
+                      {section.label} ({items.length})
+                    </span>
+                    <ChevronRight
+                      className={`size-4 transition-transform ${open ? "rotate-90" : ""}`}
+                    />
+                  </button>
+                </SidebarGroupLabel>
+              ) : (
+                <SidebarGroupLabel>{section.label}</SidebarGroupLabel>
+              )}
+              {open ? (
               <SidebarGroupContent>
                 <SidebarMenu>
                   {items.map((item) => {
                     const Icon = item.icon;
-                    const active =
-                      pathname === item.href ||
-                      pathname.startsWith(`${item.href}/`);
+                    const active = isActive(item.href);
                     return (
                       <SidebarMenuItem key={item.href}>
                         <SidebarMenuButton
@@ -77,6 +106,7 @@ export function AppSidebar({ orgName, role, isPlatformAdmin }: AppSidebarProps) 
                   })}
                 </SidebarMenu>
               </SidebarGroupContent>
+              ) : null}
             </SidebarGroup>
           );
         })}
