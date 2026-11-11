@@ -14,7 +14,7 @@ import { normalizeShopDomain } from "./index";
  */
 
 export const OAUTH_SCOPES =
-  "read_orders,read_products,read_locations,read_inventory,write_inventory,write_products,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders";
+  "read_orders,read_all_orders,read_products,read_locations,read_inventory,write_inventory,write_products,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders";
 
 const STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
