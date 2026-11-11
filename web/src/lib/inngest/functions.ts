@@ -8,6 +8,11 @@ import { discoverParcels } from "@/lib/shipping/discover";
 import { syncCatalog } from "@/lib/integrations/shopify/sync";
 import { fulfilShippedParcels } from "@/lib/integrations/shopify/fulfillment";
 import { syncPackStock } from "@/lib/stock/pack-sync";
+import {
+  BACKFILL_ACTION,
+  backfillBatch,
+  backfillStopRequested,
+} from "@/lib/integrations/shopify/backfill-fulfil";
 import { importShopifyOrders } from "@/lib/orders/import-shopify";
 import { getCredentials } from "@/lib/integrations/vault";
 import { sendOrgDigest } from "@/lib/digest/send";
@@ -229,6 +234,85 @@ const digestSendOrg = inngest.createFunction(
   }
 );
 
+// ── One-off: fulfil the old unfulfilled Shopify orders ───────────────────────
+// Started from Settings → Intégrations (owner). Each invocation handles one
+// page (≤50 orders), records a heartbeat, then re-emits itself until the
+// history is done, the run's quota is used, or a stop was requested.
+const backfillFulfil = inngest.createFunction(
+  {
+    id: "shopify-backfill-fulfil",
+    concurrency: { limit: 1, key: "event.data.orgId" },
+    retries: 2,
+    triggers: [{ event: "shopify/backfill-fulfil.requested" }],
+  },
+  async ({ event, step }) => {
+    const d = event.data as AppEvents["shopify/backfill-fulfil.requested"];
+    const stop = await step.run("stop?", () => backfillStopRequested(d.orgId, d.runId));
+    if (stop) {
+      // Final marker after any late heartbeat, so the status reads "stopped".
+      await step.run("stopped", () =>
+        getOrgDb(d.orgId).auditLog.create({
+          data: {
+            orgId: d.orgId,
+            action: BACKFILL_ACTION.STOP,
+            entity: "Order",
+            entityId: d.runId,
+            meta: { runId: d.runId, before: d.before, fulfilled: d.fulfilled, skipped: d.skipped, errors: d.errors },
+          },
+        })
+      );
+      return { stopped: true };
+    }
+    try {
+      const size = Math.min(50, d.remaining);
+      const b = await step.run("batch", () =>
+        backfillBatch(d.orgId, { before: d.before, cursor: d.cursor, size })
+      );
+      const fulfilled = d.fulfilled + b.fulfilled;
+      const skipped = d.skipped + b.skipped;
+      const errors = d.errors + b.errors.length;
+      const remaining = d.remaining - b.seen;
+      const finished = b.done || remaining <= 0 || b.seen === 0;
+      await step.run("heartbeat", () =>
+        getOrgDb(d.orgId).auditLog.create({
+          data: {
+            orgId: d.orgId,
+            action: finished ? BACKFILL_ACTION.DONE : BACKFILL_ACTION.PROGRESS,
+            entity: "Order",
+            entityId: d.runId,
+            meta: {
+              runId: d.runId,
+              before: d.before,
+              fulfilled,
+              skipped,
+              errors,
+              last: b.last ?? null,
+              sampleErrors: b.errors.slice(0, 5),
+            },
+          },
+        })
+      );
+      if (!finished) {
+        await step.sendEvent("next", {
+          name: "shopify/backfill-fulfil.requested",
+          data: {
+            ...d,
+            cursor: b.cursor,
+            remaining,
+            fulfilled,
+            skipped,
+            errors,
+          } satisfies AppEvents["shopify/backfill-fulfil.requested"],
+        });
+      }
+      return { fulfilled, skipped, errors, finished };
+    } catch (err) {
+      await captureJobError("shopify-backfill-fulfil", err, d.orgId);
+      throw err;
+    }
+  }
+);
+
 export const functions = [
   parcelSyncSchedule,
   parcelSyncOrg,
@@ -238,4 +322,5 @@ export const functions = [
   catalogSyncOrg,
   digestSchedule,
   digestSendOrg,
+  backfillFulfil,
 ];

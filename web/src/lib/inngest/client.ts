@@ -21,4 +21,15 @@ export type AppEvents = {
   "order/confirmed": { orgId: string; orderId: string };
   "shopify/import.requested": { orgId: string };
   "shopify/catalog.requested": { orgId: string };
+  "shopify/backfill-fulfil.requested": {
+    orgId: string;
+    runId: string;
+    before: string;
+    /** Orders still allowed in this run (test = 50). */
+    remaining: number;
+    cursor: string | null;
+    fulfilled: number;
+    skipped: number;
+    errors: number;
+  };
 };
