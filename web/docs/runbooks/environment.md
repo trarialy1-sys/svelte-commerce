@@ -57,6 +57,10 @@ Not set locally — the Inngest **Dev Server** is used in dev.
 |-----|------|
 | `RETURNS_AUTO_RESTOCK` | `1` = when Ozon marks a parcel « Retourné · Reçu par client », put its items back in stock (Shopify + local) and list it in **Retours à vérifier**. Leave **unset** while the Google Sheet « Suivi Ozon » still restocks returns (both on → +2). |
 | `FULFILL_ON_SHIP` | `1` = when Ozon has **picked up** a parcel (not merely created), mark its Shopify order **fulfilled** (tracking = Ozon code, no customer e-mail) so reserved stock becomes a real deduction. Off by default. Needs Shopify reconnected once (new fulfilment scope). `FULFILL_ON_SHIP_DAYS` (default 20) bounds how far back it goes. |
+| `COD_FORM_PRODUCTS` | Own cash-on-delivery order form (storefront script `/cod-form.js`, endpoint `/api/public/cod`). Comma-separated product handles the form is shown on, or `*` for all. Empty = off everywhere. Needs the `write_orders` + `write_customers` scopes. |
+| `COD_FORM_PIXEL_ID` | Meta pixel id used for InitiateCheckout / Purchase when the page has no `fbq` yet. Optional. |
+| `COD_FORM_THANKYOU_URL` | Page to send the customer to after the order. Optional (an in-form confirmation shows otherwise). |
+| `COD_FORM_ORIGINS` | Allowed storefront origins. Default `https://odes.ma,https://www.odes.ma` (the myshopify domain is always allowed). |
 | `PACK_STOCK_SYNC` | Pack stock (variant SKU `A + B`) follows its scarcest piece after each catalog sync. **On by default**; `0` stops it. |
 
 ## Legacy / optional
