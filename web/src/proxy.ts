@@ -12,6 +12,7 @@ const isPublicRoute = createRouteMatcher([
   "/api/webhooks(.*)", // Clerk webhook — verified by svix signature, not auth
   "/api/cron(.*)", // Vercel Cron — verified by CRON_SECRET in the route, no session
   "/api/inngest(.*)", // Inngest — verified by the signing key, no session
+  "/api/public(.*)", // storefront COD form — origin allow-list + validation, no session
   "/api/health", // uptime probe — no session, leaks nothing
   "/monitoring(.*)", // Sentry tunnel (next.config tunnelRoute), no session
 ]);
