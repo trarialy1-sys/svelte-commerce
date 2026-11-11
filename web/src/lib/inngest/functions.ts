@@ -6,6 +6,8 @@ import { startOfLocalDayUTC } from "@/lib/time";
 import { syncParcelStatuses } from "@/lib/shipping/status-sync";
 import { discoverParcels } from "@/lib/shipping/discover";
 import { syncCatalog } from "@/lib/integrations/shopify/sync";
+import { fulfilShippedParcels } from "@/lib/integrations/shopify/fulfillment";
+import { syncPackStock } from "@/lib/stock/pack-sync";
 import { importShopifyOrders } from "@/lib/orders/import-shopify";
 import { getCredentials } from "@/lib/integrations/vault";
 import { sendOrgDigest } from "@/lib/digest/send";
@@ -57,6 +59,12 @@ const parcelSyncOrg = inngest.createFunction(
       // so this same run tracks them too.
       await step.run("discover", () => discoverParcels(orgId));
       const result = await step.run("sync", () => syncParcelStatuses(orgId));
+      // Shipped parcels → Shopify order fulfilled (reserved → real deduction).
+      // Its own step, never fails the sync: a missing scope must not stop
+      // tracking and returns.
+      await step.run("fulfil", () =>
+        fulfilShippedParcels(orgId).catch((e) => ({ error: String((e as Error).message ?? e) }))
+      );
       if (result.changes.length) {
         await step.sendEvent(
           "status-changed",
@@ -160,7 +168,12 @@ const catalogSyncOrg = inngest.createFunction(
     });
     if (!connected) return { skipped: "not-connected" as const };
     try {
-      return await step.run("sync", () => syncCatalog(orgId));
+      const synced = await step.run("sync", () => syncCatalog(orgId));
+      // Pack stock follows its pieces (fresh quantities from the sync above).
+      const packs = await step.run("packs", () =>
+        syncPackStock(orgId).catch((e) => ({ error: String((e as Error).message ?? e) }))
+      );
+      return { ...synced, packs };
     } catch (err) {
       await captureJobError("catalog-sync-org", err, orgId);
       throw err;

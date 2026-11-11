@@ -326,6 +326,10 @@ model Parcel {
   returnCheckAt    DateTime?
   returnCheckBy    String? // Clerk user id
   returnCheckNote  String?
+  // The Shopify order was marked fulfilled (reserved stock → real deduction) —
+  // never twice. `fulfilNote` says why nothing was done (already fulfilled…).
+  fulfilledAt      DateTime?
+  fulfilNote       String?
   order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
   dnLinks     DeliveryNoteParcel[]
   org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
