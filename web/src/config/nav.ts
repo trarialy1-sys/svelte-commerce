@@ -31,17 +31,28 @@ export interface NavItem {
 export interface NavSection {
   label: string;
   items: NavItem[];
+  /** Folded by default in the sidebar (tools the team doesn't use day to day). */
+  collapsed?: boolean;
 }
 
+/**
+ * The team runs the day from the Google Sheet; the app works in the background
+ * (fulfil on pick-up, pack stock). So the sidebar shows only what's looked at,
+ * and every other tool lives under one folded "Autres outils" section.
+ * Nothing is removed: all pages stay reachable there and through search.
+ */
 export const NAV: NavSection[] = [
   {
-    label: "Pilotage",
+    label: "Essentiel",
     items: [
       { label: "Tableau de bord", href: "/dashboard", icon: LayoutDashboard },
+      { label: "Stock", href: "/stock", icon: Boxes },
+      { label: "Paramètres", href: "/settings", icon: Settings },
     ],
   },
   {
-    label: "Outils",
+    label: "Autres outils",
+    collapsed: true,
     items: [
       { label: "Lot du jour", href: "/today", icon: CalendarCheck },
       { label: "Commandes", href: "/orders", icon: ClipboardList },
@@ -53,25 +64,13 @@ export const NAV: NavSection[] = [
         icon: FileSpreadsheet,
         minRole: "operator",
       },
-      { label: "Stock", href: "/stock", icon: Boxes },
       { label: "Comptage", href: "/count", icon: ClipboardCheck },
       { label: "Catalogue", href: "/products", icon: Package },
       { label: "Clients", href: "/customers", icon: Users },
       { label: "Import", href: "/import", icon: Upload, minRole: "operator" },
       { label: "Finance", href: "/finance", icon: LineChart, minRole: "admin" },
       { label: "Rentabilité", href: "/finance/products", icon: LineChart, minRole: "admin" },
-    ],
-  },
-  {
-    label: "Plateforme",
-    items: [
       { label: "Rapports", href: "/reports", icon: BarChart3, minRole: "admin" },
-      { label: "Paramètres", href: "/settings", icon: Settings },
-    ],
-  },
-  {
-    label: "Admin",
-    items: [
       { label: "Admin", href: "/admin", icon: ShieldCheck, platformAdmin: true },
     ],
   },
