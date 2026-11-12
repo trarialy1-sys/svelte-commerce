@@ -2,7 +2,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { Funnel, FunnelRow } from "@/lib/cod/stats";
 
-const pct = (a: number, b: number) => (b > 0 ? `${Math.round((a / b) * 1000) / 10} %` : "—");
+// Opens are counted since 12 Nov 2026; orders placed without opening the form
+// (older ones, tests) would push the rate above 100 %, so it is not shown then.
+const pct = (a: number, b: number) => (b > 0 && a <= b ? `${Math.round((a / b) * 1000) / 10} %` : "—");
 const dh = (cents: number) => `${Math.round(cents / 100).toLocaleString("fr-FR")} dh`;
 
 function Rows({ title, rows }: { title: string; rows: FunnelRow[] }) {
