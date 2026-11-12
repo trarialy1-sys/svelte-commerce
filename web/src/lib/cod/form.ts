@@ -12,6 +12,7 @@ export const COD_ACTION = {
   ORDER: "cod.order_created",
   FAILED: "cod.order_failed",
   BLOCKED: "cod.order_blocked",
+  OPEN: "cod.form_opened",
 } as const;
 
 export const MAX_LINES = 10;

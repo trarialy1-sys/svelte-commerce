@@ -60,6 +60,7 @@ export interface Quote {
   discounts: { label: string; cents: number }[];
   discountCents: number;
   shipping: { title: string; cents: number };
+  fee: { title: string; cents: number } | null;
   totalCents: number;
   tier: OfferTier | null;
 }
@@ -107,6 +108,10 @@ export function pickShipping(
   }
   return { title: freeLabel, cents: 0 };
 }
+
+/** Name of the shipping line on the Shopify order ("Livraison gratuite", as Releasit writes it). */
+export const shippingLineTitle = (s: { title: string; cents: number }, freeLabel: string) =>
+  s.cents === 0 && s.title === freeLabel ? "Livraison gratuite" : s.title;
 
 const add = (list: { label: string; cents: number }[], label: string, cents: number) => {
   if (cents <= 0) return;
@@ -198,6 +203,7 @@ export function quoteCart(
   }
 
   discountCents = Math.min(discountCents, subtotalCents);
+  const fee = config.codFee.cents > 0 ? { title: config.codFee.label, cents: config.codFee.cents } : null;
   return {
     ok: true,
     quote: {
@@ -206,7 +212,8 @@ export function quoteCart(
       discounts,
       discountCents,
       shipping,
-      totalCents: subtotalCents - discountCents + shipping.cents,
+      fee,
+      totalCents: subtotalCents - discountCents + shipping.cents + (fee?.cents ?? 0),
       tier,
     },
   };

@@ -123,6 +123,8 @@ export interface CodConfig {
   thankYouUrl: string;
   pixels: Pixels;
   shippingRates: ShippingRate[];
+  /** Extra charge for paying on delivery, 0 = none (Releasit "COD fee"). */
+  codFee: { cents: number; label: string };
   offers: QuantityOffer[];
   tickUpsells: TickUpsell[];
   clickUpsells: ClickUpsell[];
@@ -205,6 +207,7 @@ export function defaultConfig(env: Record<string, string | undefined> = {}): Cod
       pinterest: [],
     },
     shippingRates: [],
+    codFee: { cents: 0, label: "Frais de paiement à la livraison" },
     offers: [],
     tickUpsells: [],
     clickUpsells: [],
@@ -347,6 +350,10 @@ export function sanitizeConfig(input: unknown, env: Record<string, string | unde
         cities: strList(r.cities, 500, 80),
       };
     }),
+    codFee: {
+      cents: int(((c.codFee ?? {}) as Record<string, unknown>).cents, 0, 10_000_000, 0),
+      label: str(((c.codFee ?? {}) as Record<string, unknown>).label, 80) || d.codFee.label,
+    },
     offers: arr(c.offers, 50, (x, i) => {
       const r = (x ?? {}) as Record<string, unknown>;
       const tiers = arr(r.tiers, 6, (y) => {
@@ -455,5 +462,6 @@ export function publicConfig(c: CodConfig, handle: string) {
     tickUpsells: cart ? [] : tickUpsellsFor(c, handle),
     clickUpsell: cart ? null : clickUpsellFor(c, handle),
     shippingRates: c.shippingRates,
+    codFee: c.codFee,
   };
 }

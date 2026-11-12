@@ -255,6 +255,9 @@
     document.documentElement.style.overflow = "hidden";
     render();
     requestQuote();
+    try {
+      fetch(API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "open", shop: SHOP, handle: handle, utm: utm }), keepalive: true }).catch(function () {});
+    } catch (e) {}
     var v = variantFor(state.pieces[0]) || firstAvailable();
     track("checkout", { value: v.price / 100, currency: "MAD", ids: [String(v.id)], qty: state.qty });
     setTimeout(function () { var f = els.fields[0]; if (f) f.input.focus(); }, 50);
@@ -353,7 +356,13 @@
     (cfg.tickUpsells || []).forEach(function (u) {
       var cb = h("input", { type: "checkbox", id: "odc-t-" + u.id });
       cb.addEventListener("change", function () { state.ticks[u.id] = cb.checked; requestQuote(); });
-      parts.push(h("label", { class: "odc-tick", for: "odc-t-" + u.id }, [cb, h("span", { text: u.label }), h("strong", { text: "+ " + money(u.priceCents) })]));
+      var ti = (cfg.upsellProducts || {})[u.variantId] || {};
+      parts.push(h("label", { class: "odc-tick", for: "odc-t-" + u.id }, [
+        cb,
+        ti.image ? h("img", { class: "odc-tickimg", src: String(ti.image).replace(/(\.[a-z]+)(\?|$)/i, "_120x$1$2"), alt: "" }) : null,
+        h("span", { text: u.label }),
+        h("strong", {}, [ti.priceCents && ti.priceCents > u.priceCents ? h("s", { class: "odc-upold", text: money(ti.priceCents) }) : null, document.createTextNode(" + " + money(u.priceCents))]),
+      ]));
     });
 
     // Promo code.
@@ -489,9 +498,11 @@
     if (q) {
       if (q.discounts.length) rows.push(h("div", {}, [h("span", { text: T.subtotal }), h("span", { text: money(q.subtotal * 100) })]));
       q.discounts.forEach(function (d) {
-        rows.push(h("div", { class: "odc-disc" }, [h("span", { text: T.discount + (d.label && d.label.indexOf("DISCOUNT") < 0 ? " (" + d.label + ")" : "") }), h("span", { text: "− " + money(d.amount * 100) })]));
+        var name = d.label === "QUANTITY DISCOUNT" ? (q.tier || T.discount) : d.label === "CUSTOM DISCOUNT" ? T.discount : T.discount + " (" + d.label + ")";
+        rows.push(h("div", { class: "odc-disc" }, [h("span", { text: name }), h("span", { text: "\u2212 " + money(d.amount * 100) })]));
       });
       rows.push(h("div", {}, [h("span", { text: T.shipping }), h("span", { text: q.shipping.amount > 0 ? money(q.shipping.amount * 100) : T.freeShipping })]));
+      if (q.fee) rows.push(h("div", {}, [h("span", { text: q.fee.title }), h("span", { text: money(q.fee.amount * 100) })]));
       rows.push(h("div", { class: "odc-total" }, [h("span", { text: T.total }), h("strong", { text: money(q.total * 100) })]));
     } else {
       var v = variantFor(state.pieces[0]);
@@ -636,10 +647,16 @@
     state.clickShown = true;
     var u = cfg.clickUpsell;
     var price = kind === "downsell" ? u.downsell.priceCents : u.priceCents;
+    var info = (cfg.upsellProducts || {})[u.variantId] || {};
     var box = h("div", { class: "odc-up", role: "dialog", "aria-modal": "true", dir: cfg.dir }, [
       h("div", { class: "odc-h1", text: kind === "downsell" ? u.downsell.headline : u.headline }),
+      info.image ? h("img", { class: "odc-upimg", src: String(info.image).replace(/(\.[a-z]+)(\?|$)/i, "_400x$1$2"), alt: info.title || "" }) : null,
+      info.title ? h("div", { class: "odc-uptitle", text: info.title }) : null,
       u.text ? h("p", { class: "odc-uptext", text: u.text }) : null,
-      h("div", { class: "odc-upprice", text: money(price) }),
+      h("div", { class: "odc-upprice" }, [
+        info.priceCents && info.priceCents > price ? h("s", { class: "odc-upold", text: money(info.priceCents) }) : null,
+        h("span", { text: money(price) }),
+      ]),
       h("button", { type: "button", class: "odc-submit", text: T.upsellAccept, onclick: function () {
         state.click = { id: u.id, kind: kind }; done();
       } }),
@@ -730,6 +747,8 @@
       ".odc-submit{display:block;width:100%;margin-top:16px;padding:16px;background:" + P + ";color:" + PT + ";border:0;border-radius:" + R + ";font:inherit;font-weight:600;font-size:15px;cursor:pointer}" +
       ".odc-submit:disabled{opacity:.5;cursor:default}" +
       ".odc-up{background:#fff;color:#111;width:100%;max-width:420px;padding:22px 18px;border-radius:14px;text-align:center}" +
+      ".odc-upimg{display:block;width:160px;height:160px;object-fit:cover;border-radius:10px;margin:8px auto}.odc-uptitle{font-weight:600;font-size:15px}" +
+      ".odc-upold{color:#999;font-weight:400;margin-inline-end:8px;font-size:.8em}.odc-tickimg{width:40px;height:40px;object-fit:cover;border-radius:6px}" +
       ".odc-uptext{font-size:14px;color:#444;margin:6px 0}.odc-upprice{font-size:22px;font-weight:700;margin:10px 0}" +
       ".odc-decline{display:block;width:100%;margin-top:10px;background:none;border:0;color:#666;text-decoration:underline;font:inherit;font-size:14px;cursor:pointer}" +
       ".odc-note{margin-top:10px;font-size:12px;color:#666;text-align:center}.odc-thanks p{margin:6px 0;font-size:14px}" +
