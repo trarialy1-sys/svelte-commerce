@@ -30,6 +30,8 @@ export type AppEvents = {
   "shopify/backfill-fulfil.requested": {
     orgId: string;
     runId: string;
+    /** "archive" closes already-fulfilled old orders instead of fulfilling. Default "fulfil". */
+    kind?: "fulfil" | "archive";
     before: string;
     /** Orders still allowed in this run (test = 50). */
     remaining: number;
