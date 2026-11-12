@@ -97,6 +97,7 @@ export interface Texts {
   upsellDecline: string;
   offerTitle: string;
   piece: string;
+  shippingMethod: string;
 }
 
 export interface CodConfig {
@@ -113,6 +114,13 @@ export interface CodConfig {
   dir: "ltr" | "rtl";
   currencyLabel: string;
   colors: { primary: string; primaryText: string; radius: number };
+  /**
+   * matchTheme: buttons and titles take the theme's own font, letter-spacing,
+   * capitals and corners (read from its "Add to cart" button).
+   * layout "icons": an icon in each field, labels beside the fields on desktop
+   * and a "delivery method" block (Releasit's layout); "simple": labels above.
+   */
+  design: { matchTheme: boolean; layout: "icons" | "simple" };
   texts: Texts;
   fields: FieldConfig[];
   cityList: string[];
@@ -143,7 +151,7 @@ export const DEFAULT_TEXTS: Texts = {
   button: "Commander — paiement à la livraison",
   title: "Commande avec paiement à la livraison",
   submit: "Terminez votre achat",
-  addressTitle: "Votre adresse de livraison",
+  addressTitle: "Insérez votre adresse de livraison",
   quantity: "Quantité",
   shipping: "Livraison",
   freeShipping: "Gratuite",
@@ -159,6 +167,7 @@ export const DEFAULT_TEXTS: Texts = {
   upsellDecline: "Non merci",
   offerTitle: "Choisissez votre offre",
   piece: "Pièce",
+  shippingMethod: "Mode de livraison",
 };
 
 export const DEFAULT_FIELDS: FieldConfig[] = [
@@ -192,6 +201,7 @@ export function defaultConfig(env: Record<string, string | undefined> = {}): Cod
     dir: "ltr",
     currencyLabel: "dh",
     colors: { primary: "#111111", primaryText: "#ffffff", radius: 10 },
+    design: { matchTheme: true, layout: "icons" },
     texts: { ...DEFAULT_TEXTS },
     fields: DEFAULT_FIELDS.map((f) => ({ ...f })),
     cityList: [],
@@ -264,6 +274,7 @@ export function sanitizeConfig(input: unknown, env: Record<string, string | unde
   const c = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   const t = (c.texts ?? {}) as Record<string, unknown>;
   const col = (c.colors ?? {}) as Record<string, unknown>;
+  const des = (c.design ?? {}) as Record<string, unknown>;
   const px = (c.pixels ?? {}) as Record<string, unknown>;
   const fr = (c.fraud ?? {}) as Record<string, unknown>;
 
@@ -306,6 +317,10 @@ export function sanitizeConfig(input: unknown, env: Record<string, string | unde
       primary: color(col.primary, d.colors.primary),
       primaryText: color(col.primaryText, d.colors.primaryText),
       radius: int(col.radius, 0, 30, d.colors.radius),
+    },
+    design: {
+      matchTheme: bool(des.matchTheme, d.design.matchTheme),
+      layout: des.layout === "simple" ? "simple" : "icons",
     },
     texts,
     fields,
@@ -449,6 +464,7 @@ export function publicConfig(c: CodConfig, handle: string) {
     dir: c.dir,
     currencyLabel: c.currencyLabel,
     colors: c.colors,
+    design: c.design,
     texts: c.texts,
     fields: c.fields.filter((f) => f.show),
     cityList: c.cityList,
