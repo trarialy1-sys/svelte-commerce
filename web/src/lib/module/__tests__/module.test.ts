@@ -68,6 +68,7 @@ beforeAll(async () => {
   for (let i = 0; i < 30; i++) {
     await getOrgDb(ORG_A).customer.create({
       data: {
+        orgId: ORG_A,
         name: `Cust A${i}`,
         phone: `a${i}`,
         city: i % 2 ? "Casablanca" : "Rabat",
@@ -86,6 +87,7 @@ beforeAll(async () => {
   for (let i = 0; i < 5; i++) {
     await getOrgDb(ORG_B).customer.create({
       data: {
+        orgId: ORG_B,
         name: `Cust B${i}`,
         phone: `b${i}`,
         city: "Fès",

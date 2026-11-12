@@ -55,10 +55,10 @@ describe("dashboard payload money-gating (DB)", () => {
     await db.organization.create({ data: { id: ORG, name: "RBAC Org" } });
     // A delivered parcel so the finance block has a non-trivial value.
     const order = await getOrgDb(ORG).order.create({
-      data: { code: "RBAC-1", totalPrice: 100 },
+      data: { orgId: ORG, code: "RBAC-1", totalPrice: 100 },
     });
     await getOrgDb(ORG).parcel.create({
-      data: { orderId: order.id, codPrice: 100, status: "LIVRE" },
+      data: { orgId: ORG, orderId: order.id, codPrice: 100, status: "LIVRE" },
     });
   });
 
