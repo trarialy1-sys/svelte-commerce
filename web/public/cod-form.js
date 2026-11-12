@@ -215,8 +215,22 @@
     els.submit.textContent = state.sending ? "Envoi en cours\u2026" : "Terminez votre achat \u2014 " + money(unit * state.qty);
   }
 
+  /* Meta cookies for the server-side Purchase (matched to the ad click). */
+  function cookie(name) {
+    var m = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
+    return m ? decodeURIComponent(m[1]) : "";
+  }
+  function fbc() {
+    var c = cookie("_fbc");
+    if (c) return c;
+    var id = new URLSearchParams(location.search).get("fbclid") || (utm && utm.fbclid);
+    return id ? "fb.1." + Date.now() + "." + id : "";
+  }
+
   function payload(action) {
     return {
+      fbp: cookie("_fbp"),
+      fbc: fbc(),
       action: action,
       shop: SHOP,
       leadId: leadId,

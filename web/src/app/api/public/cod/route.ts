@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { allowedOrigins, isProductEnabled, validateSubmission } from "@/lib/cod/form";
 import { codEnabledProducts, createCodOrder, resolveOrgByShop, saveLead } from "@/lib/cod/order";
 import { inngest, type AppEvents } from "@/lib/inngest/client";
+import { buildPurchaseInput, capiConfigured } from "@/lib/meta/capi";
 import { logError } from "@/lib/observability/logger";
 
 export const runtime = "nodejs";
@@ -100,6 +101,33 @@ export async function POST(req: NextRequest) {
           data: { orgId, orderId: r.orderId } satisfies AppEvents["sheets/order.export"],
         })
         .catch((e) => logError("Sheets export enqueue failed", e, { route: "public/cod", orgId }));
+      // Server-side Meta Purchase (same event id as the browser pixel → deduplicated).
+      if (capiConfigured()) {
+        const s = v.value;
+        await inngest
+          .send({
+            name: "meta/purchase.send",
+            data: {
+              orgId,
+              ...buildPurchaseInput({
+                orderName: r.orderName,
+                orderId: r.orderId,
+                totalCents: r.totalCents,
+                currency: r.currency,
+                variantIds: s.items.map((i) => i.variantId),
+                numItems: s.items.reduce((n, i) => n + i.quantity, 0),
+                phone: s.phone,
+                city: s.city,
+                ip,
+                userAgent: req.headers.get("user-agent"),
+                fbp: body.fbp,
+                fbc: body.fbc,
+                sourceUrl: s.pageUrl,
+              }),
+            } satisfies AppEvents["meta/purchase.send"],
+          })
+          .catch((e) => logError("Meta CAPI enqueue failed", e, { route: "public/cod", orgId }));
+      }
     }
     return NextResponse.json(
       { ok: true, orderName: r.orderName, total: r.totalCents / 100, currency: r.currency },

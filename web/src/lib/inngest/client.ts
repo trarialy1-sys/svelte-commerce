@@ -1,5 +1,7 @@
 import { Inngest } from "inngest";
 
+import type { PurchaseInput } from "@/lib/meta/capi";
+
 export const inngest = new Inngest({ id: "partner-os" });
 
 /**
@@ -23,6 +25,8 @@ export type AppEvents = {
   "shopify/catalog.requested": { orgId: string };
   /** Write one Shopify order (gid) as a row in the org's Google Sheet. */
   "sheets/order.export": { orgId: string; orderId: string };
+  /** Server-side Meta Purchase for a form order (personal data already hashed). */
+  "meta/purchase.send": PurchaseInput & { orgId: string };
   "shopify/backfill-fulfil.requested": {
     orgId: string;
     runId: string;
