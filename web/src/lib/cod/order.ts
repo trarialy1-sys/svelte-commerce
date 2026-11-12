@@ -20,7 +20,7 @@ export async function resolveOrgByShop(shop: string): Promise<string | null> {
   const domain = normalizeShopDomain(shop);
   if (!domain) return null;
   const rows = await db.integration.findMany({
-    where: { provider: "SHOPIFY", status: "connected" },
+    where: { provider: "SHOPIFY", status: { not: "disconnected" } },
     select: { orgId: true, meta: true },
   });
   const hit = rows.find(

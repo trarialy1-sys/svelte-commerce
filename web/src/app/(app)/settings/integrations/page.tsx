@@ -8,6 +8,8 @@ import {
   countOldUnfulfilled,
 } from "@/lib/integrations/shopify/backfill-fulfil";
 import { BackfillCard } from "./backfill-card";
+import { CodCard } from "./cod-card";
+import { codOverview } from "@/lib/cod/install";
 import { IntegrationsClient } from "./integrations-client";
 
 export const dynamic = "force-dynamic";
@@ -41,6 +43,8 @@ export default async function IntegrationsPage() {
       }
     : null;
 
+  const cod = showBackfill ? await codOverview(orgId!).catch(() => null) : null;
+
   return (
     <div className="flex flex-col gap-6">
       <IntegrationsClient
@@ -48,6 +52,7 @@ export default async function IntegrationsPage() {
         isOwner={appRole === "owner"}
         shopifyRedirectUri={shopifyRedirectUri()}
       />
+      {cod ? <CodCard initial={cod} /> : null}
       {backfill ? <BackfillCard initial={backfill} /> : null}
     </div>
   );
