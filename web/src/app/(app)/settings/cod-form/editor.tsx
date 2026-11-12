@@ -137,7 +137,7 @@ export function CodFormEditor({ initial }: { initial: CodConfig }) {
       </div>
 
       <Tabs defaultValue="general">
-        <TabsList className="flex h-auto flex-wrap justify-start">
+        <TabsList className="flex h-auto w-full flex-wrap justify-start">
           <TabsTrigger value="general">Général</TabsTrigger>
           <TabsTrigger value="fields">Champs</TabsTrigger>
           <TabsTrigger value="look">Textes & style</TabsTrigger>
@@ -280,6 +280,16 @@ export function CodFormEditor({ initial }: { initial: CodConfig }) {
         {/* ── Livraison ── */}
         <TabsContent value="shipping">
           <RatesEditor rates={c.shippingRates} onChange={(v) => set("shippingRates", v)} />
+          <Card className="mt-4">
+            <CardContent className="flex flex-col gap-3 pt-6">
+              <Row label="Frais de paiement à la livraison" hint="Ajoutés à chaque commande (0 = aucun).">
+                <Money value={c.codFee.cents} onChange={(v) => set("codFee", { ...c.codFee, cents: v ?? 0 })} />
+              </Row>
+              <Row label="Libellé des frais">
+                <Input value={c.codFee.label} onChange={(e) => set("codFee", { ...c.codFee, label: e.target.value })} />
+              </Row>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* ── Codes promo ── */}

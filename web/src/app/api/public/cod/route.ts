@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { publicConfig } from "@/lib/cod/config";
 import { allowedOrigins, validateSubmission } from "@/lib/cod/form";
-import { createCodOrder, quoteSubmission, resolveOrgByShop, saveLead } from "@/lib/cod/order";
+import { createCodOrder, quoteSubmission, resolveOrgByShop, saveLead, upsellInfo } from "@/lib/cod/order";
+import { logFormOpen } from "@/lib/cod/stats";
 import { centsToAmount } from "@/lib/cod/form";
 import { getCodConfig } from "@/lib/cod/store";
 import { inngest, type AppEvents } from "@/lib/inngest/client";
@@ -47,7 +48,10 @@ export async function GET(req: NextRequest) {
   try {
     const orgId = handle ? await resolveOrgByShop(shop) : null;
     if (!orgId) return NextResponse.json({ enabled: false }, { headers });
-    return NextResponse.json(publicConfig(await getCodConfig(orgId), handle), { headers });
+    const pc = publicConfig(await getCodConfig(orgId), handle);
+    const ids = pc.enabled ? [...pc.tickUpsells.map((u) => u.variantId), ...(pc.clickUpsell ? [pc.clickUpsell.variantId] : [])] : [];
+    const upsellProducts = ids.length ? await upsellInfo(orgId, ids).catch(() => ({})) : {};
+    return NextResponse.json({ ...pc, upsellProducts }, { headers });
   } catch (e) {
     logError("COD form config failed", e, { route: "public/cod" });
     return NextResponse.json({ enabled: false }, { headers });
@@ -76,6 +80,18 @@ export async function POST(req: NextRequest) {
     if (!body.city) body.city = "--";
     if (!body.address) body.address = "---";
     if (!body.name) body.name = "--";
+  }
+  // Funnel: the form was opened (one per visitor and product per 30 min).
+  if (body.action === "open") {
+    try {
+      const orgId = await resolveOrgByShop(shop);
+      const handle = String(body.handle ?? "").toLowerCase().slice(0, 255);
+      const ip = clientIp(req);
+      if (orgId && handle) await logFormOpen(orgId, handle, ip, (body.utm ?? {}) as Record<string, unknown>);
+    } catch (e) {
+      logError("COD form open log failed", e, { route: "public/cod" });
+    }
+    return NextResponse.json({ ok: true }, { headers });
   }
   if (body.action === "quote") {
     // The summary needs no contact details yet.
@@ -115,6 +131,7 @@ export async function POST(req: NextRequest) {
           discounts: qt.discounts.map((d) => ({ label: d.label, amount: Number(centsToAmount(d.cents)) })),
           discount: Number(centsToAmount(qt.discountCents)),
           shipping: { title: qt.shipping.title, amount: Number(centsToAmount(qt.shipping.cents)) },
+          fee: qt.fee ? { title: qt.fee.title, amount: Number(centsToAmount(qt.fee.cents)) } : null,
           total: Number(centsToAmount(qt.totalCents)),
           tier: qt.tier?.label ?? null,
         },

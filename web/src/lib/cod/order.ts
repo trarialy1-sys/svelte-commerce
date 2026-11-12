@@ -12,7 +12,7 @@ import {
   type CodConfig,
 } from "./config";
 import { COD_ACTION, COD_GATEWAY, COD_TAG, amountToCents, centsToAmount, normalizePhone, type CodSubmission } from "./form";
-import { CART_HANDLE, discountTitle, quoteCart, type PricedVariant, type PromoCode, type Quote } from "./pricing";
+import { CART_HANDLE, discountTitle, quoteCart, shippingLineTitle, type PricedVariant, type PromoCode, type Quote } from "./pricing";
 import { getCodConfig } from "./store";
 
 /** Which org owns this shop (the storefront script only knows the shop). */
@@ -331,7 +331,12 @@ export async function createCodOrder(orgId: string, s: CodSubmission, ip: string
     ...(s.note ? { note: s.note } : {}),
     ...(s.email ? { email: s.email } : {}),
     shippingLines: [
-      { title: quote.shipping.title, code: quote.shipping.title, priceSet: money(quote.shipping.cents, currency) },
+      {
+        title: shippingLineTitle(quote.shipping, config.texts.freeShipping),
+        code: shippingLineTitle(quote.shipping, config.texts.freeShipping),
+        priceSet: money(quote.shipping.cents, currency),
+      },
+      ...(quote.fee ? [{ title: quote.fee.title, code: "COD_FEE", priceSet: money(quote.fee.cents, currency) }] : []),
     ],
     transactions: [{ kind: "SALE", status: "PENDING", gateway: COD_GATEWAY, amountSet: money(quote.totalCents, currency) }],
   };
@@ -392,10 +397,56 @@ export async function createCodOrder(orgId: string, s: CodSubmission, ip: string
         currency,
         utm: s.utm,
         handle: s.handle,
-        tier: quote.tier?.label ?? null,
+        tier: quote.tier && quote.tier.type !== "none" ? quote.tier.label : null,
         upsells: quote.lines.filter((l) => l.kind !== "main").map((l) => l.kind),
       } as object,
     },
   });
   return { ok: true, orderName: order.name, orderId: order.id, totalCents: quote.totalCents, currency, quote };
+}
+
+// ── upsell product cards (image, title, normal price) for the storefront ─────
+const UPSELL_INFO = `
+query CodUpsellInfo($ids: [ID!]!) {
+  nodes(ids: $ids) {
+    ... on ProductVariant {
+      id
+      title
+      price
+      image { url }
+      product { title featuredImage { url } }
+    }
+  }
+}`;
+
+export interface UpsellInfo {
+  title: string;
+  image: string | null;
+  priceCents: number;
+}
+
+const upsellCache = new Map<string, { at: number; info: Record<string, UpsellInfo> }>();
+
+/** Title, picture and normal price of the upsell variants (cached 5 min). */
+export async function upsellInfo(orgId: string, variantIds: string[]): Promise<Record<string, UpsellInfo>> {
+  const ids = [...new Set(variantIds)].sort();
+  if (!ids.length) return {};
+  const key = `${orgId}:${ids.join(",")}`;
+  const hit = upsellCache.get(key);
+  if (hit && Date.now() - hit.at < 300_000) return hit.info;
+  const { gql } = await getShopifyClient(orgId);
+  const d = await gql<{
+    nodes: ({ id: string; title: string; price: string; image: { url: string } | null; product: { title: string; featuredImage: { url: string } | null } } | null)[];
+  }>(UPSELL_INFO, { ids: ids.map((i) => `gid://shopify/ProductVariant/${i}`) });
+  const info: Record<string, UpsellInfo> = {};
+  d.nodes.forEach((n, i) => {
+    if (!n?.id) return;
+    info[ids[i]] = {
+      title: n.title && n.title !== "Default Title" ? `${n.product.title} - ${n.title}` : n.product.title,
+      image: n.image?.url ?? n.product.featuredImage?.url ?? null,
+      priceCents: amountToCents(n.price),
+    };
+  });
+  upsellCache.set(key, { at: Date.now(), info });
+  return info;
 }
