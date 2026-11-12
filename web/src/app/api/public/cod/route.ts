@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { allowedOrigins, isProductEnabled, validateSubmission } from "@/lib/cod/form";
 import { codEnabledProducts, createCodOrder, resolveOrgByShop, saveLead } from "@/lib/cod/order";
+import { inngest, type AppEvents } from "@/lib/inngest/client";
 import { logError } from "@/lib/observability/logger";
 
 export const runtime = "nodejs";
@@ -89,6 +90,16 @@ export async function POST(req: NextRequest) {
     const r = await createCodOrder(orgId, v.value, ip);
     if (!r.ok) {
       return NextResponse.json({ ok: false, field: r.field, message: r.message }, { status: r.status, headers });
+    }
+    // Queue the Google Sheet row. Never fail the customer's order over it:
+    // the job is idempotent and the card in Paramètres shows any miss.
+    if (!r.duplicate) {
+      await inngest
+        .send({
+          name: "sheets/order.export",
+          data: { orgId, orderId: r.orderId } satisfies AppEvents["sheets/order.export"],
+        })
+        .catch((e) => logError("Sheets export enqueue failed", e, { route: "public/cod", orgId }));
     }
     return NextResponse.json(
       { ok: true, orderName: r.orderName, total: r.totalCents / 100, currency: r.currency },

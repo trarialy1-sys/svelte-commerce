@@ -21,6 +21,8 @@ export type AppEvents = {
   "order/confirmed": { orgId: string; orderId: string };
   "shopify/import.requested": { orgId: string };
   "shopify/catalog.requested": { orgId: string };
+  /** Write one Shopify order (gid) as a row in the org's Google Sheet. */
+  "sheets/order.export": { orgId: string; orderId: string };
   "shopify/backfill-fulfil.requested": {
     orgId: string;
     runId: string;

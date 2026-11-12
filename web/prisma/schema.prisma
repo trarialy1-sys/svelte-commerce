@@ -23,6 +23,7 @@ enum IntegrationProvider {
   SHOPIFY
   OZON
   ANTHROPIC
+  GOOGLE_SHEETS
 }
 
 enum OrderStatus {
