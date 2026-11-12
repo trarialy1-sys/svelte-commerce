@@ -237,6 +237,12 @@ export function CodFormEditor({ initial }: { initial: CodConfig }) {
         <TabsContent value="look">
           <Card>
             <CardContent className="flex flex-col gap-3 pt-6">
+              <Row label="Style du thème" hint="Boutons et titres reprennent la police, les majuscules et les coins du bouton « Ajouter au panier » de votre thème.">
+                <Choice value={c.design.matchTheme ? "yes" : "no"} onChange={(v) => set("design", { ...c.design, matchTheme: v === "yes" })} options={[["yes", "Comme le thème"], ["no", "Réglages ci-dessous"]]} />
+              </Row>
+              <Row label="Disposition du formulaire">
+                <Choice value={c.design.layout} onChange={(v) => set("design", { ...c.design, layout: v as "icons" | "simple" })} options={[["icons", "Icônes dans les champs (comme Releasit)"], ["simple", "Simple (libellés au-dessus)"]]} />
+              </Row>
               <Row label="Couleur principale">
                 <div className="flex gap-2">
                   <input type="color" value={c.colors.primary} onChange={(e) => set("colors", { ...c.colors, primary: e.target.value })} />
@@ -249,7 +255,7 @@ export function CodFormEditor({ initial }: { initial: CodConfig }) {
                   <Input value={c.colors.primaryText} onChange={(e) => set("colors", { ...c.colors, primaryText: e.target.value })} />
                 </div>
               </Row>
-              <Row label="Arrondi des boutons (px)">
+              <Row label="Arrondi des boutons (px)" hint="Ignoré quand le style du thème est activé.">
                 <Input type="number" min={0} max={30} value={c.colors.radius} onChange={(e) => set("colors", { ...c.colors, radius: Number(e.target.value) })} />
               </Row>
               <Row label="Sens d'écriture">
@@ -368,6 +374,7 @@ export function CodFormEditor({ initial }: { initial: CodConfig }) {
 }
 
 const TEXT_LABELS: Partial<Record<keyof Texts, string>> = {
+  shippingMethod: "Titre « Mode de livraison »",
   button: "Bouton sur la page produit",
   title: "Titre du formulaire",
   submit: "Bouton de validation",
