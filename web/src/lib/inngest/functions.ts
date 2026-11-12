@@ -259,7 +259,7 @@ const backfillFulfil = inngest.createFunction(
             action: BACKFILL_ACTION.STOP,
             entity: "Order",
             entityId: d.runId,
-            meta: { runId: d.runId, before: d.before, fulfilled: d.fulfilled, skipped: d.skipped, errors: d.errors },
+            meta: { runId: d.runId, kind: d.kind ?? "fulfil", before: d.before, fulfilled: d.fulfilled, skipped: d.skipped, errors: d.errors },
           },
         })
       );
@@ -268,7 +268,7 @@ const backfillFulfil = inngest.createFunction(
     try {
       const size = Math.min(50, d.remaining);
       const b = await step.run("batch", () =>
-        backfillBatch(d.orgId, { before: d.before, cursor: d.cursor, size })
+        backfillBatch(d.orgId, { before: d.before, cursor: d.cursor, size, kind: d.kind })
       );
       const fulfilled = d.fulfilled + b.fulfilled;
       const skipped = d.skipped + b.skipped;
@@ -284,6 +284,7 @@ const backfillFulfil = inngest.createFunction(
             entityId: d.runId,
             meta: {
               runId: d.runId,
+              kind: d.kind ?? "fulfil",
               before: d.before,
               fulfilled,
               skipped,

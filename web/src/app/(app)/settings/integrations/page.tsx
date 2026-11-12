@@ -5,6 +5,7 @@ import type { SafeIntegration } from "@/lib/integrations/types";
 import {
   backfillCutoff,
   backfillStatus,
+  countOldArchivable,
   countOldUnfulfilled,
 } from "@/lib/integrations/shopify/backfill-fulfil";
 import { BackfillCard } from "./backfill-card";
@@ -43,6 +44,7 @@ export default async function IntegrationsPage() {
         ...(await backfillStatus(orgId!)),
         cutoff: backfillCutoff(),
         pending: await countOldUnfulfilled(orgId!, backfillCutoff()).catch(() => null),
+        archivable: await countOldArchivable(orgId!, backfillCutoff()).catch(() => null),
       }
     : null;
 

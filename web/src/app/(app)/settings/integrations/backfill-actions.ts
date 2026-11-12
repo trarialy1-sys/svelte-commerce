@@ -9,7 +9,9 @@ import {
   BACKFILL_ACTION,
   backfillCutoff,
   backfillStatus,
+  countOldArchivable,
   countOldUnfulfilled,
+  type BackfillKind,
   type BackfillStatus,
 } from "@/lib/integrations/shopify/backfill-fulfil";
 
@@ -18,6 +20,8 @@ type Result<T = unknown> = { ok: true; data: T } | { ok: false; message: string 
 export interface BackfillOverview extends BackfillStatus {
   cutoff: string;
   pending: number | null;
+  /** Old orders already fulfilled but still open (can be archived). */
+  archivable: number | null;
 }
 
 /** How many old orders are still unfulfilled + the latest run. Owner only. */
@@ -25,11 +29,12 @@ export async function backfillOverviewAction(): Promise<Result<BackfillOverview>
   const { orgId } = await requireOrgRole("owner");
   const cutoff = backfillCutoff();
   try {
-    const [status, pending] = await Promise.all([
+    const [status, pending, archivable] = await Promise.all([
       backfillStatus(orgId!),
       countOldUnfulfilled(orgId!, cutoff).catch(() => null),
+      countOldArchivable(orgId!, cutoff).catch(() => null),
     ]);
-    return { ok: true, data: { ...status, cutoff, pending } };
+    return { ok: true, data: { ...status, cutoff, pending, archivable } };
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "Échec" };
   }
@@ -39,7 +44,11 @@ export async function backfillOverviewAction(): Promise<Result<BackfillOverview>
  * Start the clean-up. `test` = the 50 oldest orders only; `all` = everything
  * older than the cut-off. Owner only, audited, one run at a time.
  */
-export async function startBackfillAction(mode: "test" | "all"): Promise<Result<{ runId: string }>> {
+export async function startBackfillAction(
+  mode: "test" | "all",
+  kind: BackfillKind = "fulfil"
+): Promise<Result<{ runId: string }>> {
+  if (kind !== "fulfil" && kind !== "archive") return { ok: false, message: "Action inconnue." };
   const { orgId, userId } = await requireOrgRole("owner");
   const status = await backfillStatus(orgId!);
   if (status.running) return { ok: false, message: "Un nettoyage est déjà en cours." };
@@ -53,7 +62,7 @@ export async function startBackfillAction(mode: "test" | "all"): Promise<Result<
       action: BACKFILL_ACTION.START,
       entity: "Order",
       entityId: runId,
-      meta: { runId, before, mode, fulfilled: 0, skipped: 0, errors: 0 },
+      meta: { runId, kind, before, mode, fulfilled: 0, skipped: 0, errors: 0 },
     },
   });
   await inngest.send({
@@ -61,6 +70,7 @@ export async function startBackfillAction(mode: "test" | "all"): Promise<Result<
     data: {
       orgId: orgId!,
       runId,
+      kind,
       before,
       remaining,
       cursor: null,
@@ -89,6 +99,7 @@ export async function stopBackfillAction(): Promise<Result<null>> {
       entityId: status.runId,
       meta: {
         runId: status.runId,
+        kind: status.kind,
         before: status.before,
         fulfilled: status.fulfilled,
         skipped: status.skipped,

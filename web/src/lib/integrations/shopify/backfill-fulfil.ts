@@ -41,6 +41,21 @@ export function backfillQuery(before: string): string {
   return `fulfillment_status:unfulfilled status:open created_at:<${before}`;
 }
 
+/** Old orders already fulfilled but still open (COD "payment pending"): they only clutter the open list. */
+export function archiveQuery(before: string): string {
+  return `fulfillment_status:fulfilled status:open created_at:<${before}`;
+}
+
+export type BackfillKind = "fulfil" | "archive";
+
+const ORDER_CLOSE = `
+mutation OrderClose($input: OrderCloseInput!) {
+  orderClose(input: $input) {
+    order { id }
+    userErrors { field message }
+  }
+}`;
+
 const OLD_ORDERS = `
 query OldUnfulfilled($q: String!, $first: Int!, $after: String) {
   orders(first: $first, after: $after, query: $q, sortKey: CREATED_AT) {
@@ -71,6 +86,12 @@ export async function countOldUnfulfilled(orgId: string, before: string): Promis
   return d.ordersCount.count;
 }
 
+export async function countOldArchivable(orgId: string, before: string): Promise<number> {
+  const { gql } = await getShopifyClient(orgId);
+  const d = await gql<{ ordersCount: { count: number } }>(COUNT, { q: archiveQuery(before) });
+  return d.ordersCount.count;
+}
+
 export interface BackfillBatch {
   seen: number;
   fulfilled: number;
@@ -85,8 +106,9 @@ export interface BackfillBatch {
 /** Fulfil one page of old orders (oldest first), resuming after `cursor`. */
 export async function backfillBatch(
   orgId: string,
-  opts: { before: string; cursor?: string | null; size?: number }
+  opts: { before: string; cursor?: string | null; size?: number; kind?: BackfillKind }
 ): Promise<BackfillBatch> {
+  const archive = opts.kind === "archive";
   const { gql } = await getShopifyClient(orgId);
   const size = Math.min(Math.max(opts.size ?? 50, 1), 100);
   const data = await gql<{
@@ -94,7 +116,11 @@ export async function backfillBatch(
       pageInfo: { hasNextPage: boolean; endCursor: string | null };
       nodes: ({ id: string; name: string } & NonNullable<Parameters<typeof decideFulfilment>[0]>)[];
     };
-  }>(OLD_ORDERS, { q: backfillQuery(opts.before), first: size, after: opts.cursor ?? null });
+  }>(OLD_ORDERS, {
+    q: archive ? archiveQuery(opts.before) : backfillQuery(opts.before),
+    first: size,
+    after: opts.cursor ?? null,
+  });
 
   const out: BackfillBatch = {
     seen: 0,
@@ -108,6 +134,25 @@ export async function backfillBatch(
   };
   for (const o of data.orders.nodes) {
     out.seen++;
+    if (archive) {
+      // Archiving = closing the order: reversible, no effect on stock, payment or reports.
+      try {
+        const r = await gql<{ orderClose: { userErrors: { message: string }[] } }>(ORDER_CLOSE, {
+          input: { id: o.id },
+        });
+        const errs = r.orderClose?.userErrors ?? [];
+        if (errs.length) {
+          out.errors.push(`${o.name}: ${errs.map((e) => e.message).join("; ")}`.slice(0, 160));
+          out.skipped++;
+        } else {
+          out.fulfilled++;
+        }
+      } catch (e) {
+        out.errors.push(`${o.name}: ${(e as Error).message}`.slice(0, 160));
+        out.skipped++;
+      }
+      continue;
+    }
     const d = decideFulfilment(o);
     if (d.outcome !== "FULFILL") {
       out.skipped++;
@@ -148,6 +193,7 @@ export interface BackfillStatus {
   last: string | null;
   updatedAt: string | null;
   state: "idle" | "running" | "stopped" | "done";
+  kind: BackfillKind;
 }
 
 /** Latest run, read from the audit log (no extra table). */
@@ -162,7 +208,7 @@ export async function backfillStatus(orgId: string): Promise<BackfillStatus> {
   const r = rows[0];
   const idle: BackfillStatus = {
     running: false, runId: null, before: null, fulfilled: 0, skipped: 0, errors: 0,
-    last: null, updatedAt: null, state: "idle",
+    last: null, updatedAt: null, state: "idle", kind: "fulfil",
   };
   if (!r) return idle;
   const m = (r.meta ?? {}) as Record<string, unknown>;
@@ -180,6 +226,7 @@ export async function backfillStatus(orgId: string): Promise<BackfillStatus> {
     last: (m.last as string) ?? null,
     updatedAt: r.createdAt.toISOString(),
     state: state === "running" && stale ? "stopped" : state,
+    kind: m.kind === "archive" ? "archive" : "fulfil",
   };
 }
 

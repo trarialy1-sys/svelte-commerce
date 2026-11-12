@@ -41,19 +41,21 @@ export function BackfillCard({ initial }: { initial: BackfillOverview }) {
     return () => clearInterval(t);
   }, [data?.running, load]);
 
-  async function start(mode: "test" | "all") {
+  async function start(mode: "test" | "all", kind: "fulfil" | "archive" = "fulfil") {
     if (
       mode === "all" &&
       !window.confirm(
-        "Marquer TOUTES les anciennes commandes comme traitées ? Difficile à annuler. Faites d'abord le test de 50."
+        kind === "archive"
+          ? "Archiver TOUTES les anciennes commandes déjà traitées ? (Réversible commande par commande.) Faites d'abord le test de 50."
+          : "Marquer TOUTES les anciennes commandes comme traitées ? Difficile à annuler. Faites d'abord le test de 50."
       )
     ) {
       return;
     }
-    setPending(mode);
+    setPending(`${kind}-${mode}`);
     try {
-      const r = await startBackfillAction(mode);
-      if (r.ok) toast.success(mode === "test" ? "Test lancé (50 commandes)" : "Nettoyage lancé");
+      const r = await startBackfillAction(mode, kind);
+      if (r.ok) toast.success(mode === "test" ? "Test lancé (50 commandes)" : "Lancé");
       else toast.error(r.message);
       await load();
     } finally {
@@ -102,7 +104,10 @@ export function BackfillCard({ initial }: { initial: BackfillOverview }) {
       <CardContent className="flex flex-col gap-3 text-sm">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <Stat label={`À traiter (avant le ${data?.cutoff ?? "…"})`} value={data?.pending == null ? "…" : nf.format(data.pending)} />
-          <Stat label="Dernier lancement" value={stateLabel} />
+          <Stat
+            label={`Dernier lancement (${data?.kind === "archive" ? "archivage" : "traitement"})`}
+            value={stateLabel}
+          />
           <Stat label="Traitées" value={nf.format(data?.fulfilled ?? 0)} />
           <Stat label="Ignorées / erreurs" value={`${nf.format(data?.skipped ?? 0)} / ${nf.format(data?.errors ?? 0)}`} />
         </div>
@@ -116,11 +121,11 @@ export function BackfillCard({ initial }: { initial: BackfillOverview }) {
             disabled={pending !== null || data?.running}
             onClick={() => start("test")}
           >
-            {pending === "test" ? <Loader2 className="size-4 animate-spin" /> : null}
+            {pending === "fulfil-test" ? <Loader2 className="size-4 animate-spin" /> : null}
             Tester sur 50
           </Button>
           <Button size="sm" disabled={pending !== null || data?.running} onClick={() => start("all")}>
-            {pending === "all" ? <Loader2 className="size-4 animate-spin" /> : null}
+            {pending === "fulfil-all" ? <Loader2 className="size-4 animate-spin" /> : null}
             Tout traiter
           </Button>
           {data?.running ? (
@@ -128,6 +133,39 @@ export function BackfillCard({ initial }: { initial: BackfillOverview }) {
               Arrêter
             </Button>
           ) : null}
+        </div>
+        <div className="border-t pt-3">
+          <p className="text-muted-foreground mb-2 text-xs">
+            Les anciennes commandes déjà traitées restent « ouvertes » dans Shopify (paiement à la
+            livraison en attente) et gonflent le compteur Commandes. Les archiver les retire de la
+            liste ouverte ; stock, paiement et rapports ne changent pas, et chaque commande peut
+            être désarchivée.
+          </p>
+          <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Stat
+              label={`À archiver (avant le ${data?.cutoff ?? "…"})`}
+              value={data?.archivable == null ? "…" : nf.format(data.archivable)}
+            />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pending !== null || data?.running}
+              onClick={() => start("test", "archive")}
+            >
+              {pending === "archive-test" ? <Loader2 className="size-4 animate-spin" /> : null}
+              Tester l&apos;archivage sur 50
+            </Button>
+            <Button
+              size="sm"
+              disabled={pending !== null || data?.running}
+              onClick={() => start("all", "archive")}
+            >
+              {pending === "archive-all" ? <Loader2 className="size-4 animate-spin" /> : null}
+              Tout archiver
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>
