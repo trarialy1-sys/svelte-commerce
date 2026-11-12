@@ -174,6 +174,7 @@ export function CodFormEditor({ initial }: { initial: CodConfig }) {
               </Row>
               <Row label="Boutons">
                 <Toggle checked={c.stickyButton} onChange={(v) => set("stickyButton", v)} label="Bouton fixe en bas de l'écran (mobile)" />
+                <Toggle checked={c.cartButton} onChange={(v) => set("cartButton", v)} label="Bouton sur la page panier (commande tout le panier)" />
                 <Toggle checked={c.hideAddToCart} onChange={(v) => set("hideAddToCart", v)} label="Cacher « Ajouter au panier »" />
                 <Toggle checked={c.hideBuyNow} onChange={(v) => set("hideBuyNow", v)} label="Cacher « Acheter maintenant »" />
               </Row>

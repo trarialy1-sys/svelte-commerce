@@ -25,19 +25,31 @@
   } catch (e) {}
 
   var m = location.pathname.match(/\/products\/([^/?#]+)/);
-  if (!m || !SHOP) return;
-  var handle = decodeURIComponent(m[1]).toLowerCase();
+  var cartMode = !m && /\/cart\/?$/.test(location.pathname);
+  if ((!m && !cartMode) || !SHOP) return;
+  var handle = cartMode ? "__cart__" : decodeURIComponent(m[1]).toLowerCase();
   var root = (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || "/";
+  var cart = null;
 
   var product, cfg, T, state, els = {}, quoteTimer = null, quoteSeq = 0;
   var leadId = (Date.now().toString(36) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)).slice(0, 32);
 
   Promise.all([
     fetch(API + "?shop=" + encodeURIComponent(SHOP) + "&handle=" + encodeURIComponent(handle)).then(function (r) { return r.json(); }),
-    fetch(root + "products/" + encodeURIComponent(handle) + ".js").then(function (r) { return r.json(); }),
+    fetch(cartMode ? root + "cart.js" : root + "products/" + encodeURIComponent(handle) + ".js").then(function (r) { return r.json(); }),
   ]).then(function (res) {
     cfg = res[0];
-    product = res[1];
+    if (cartMode) {
+      cart = res[1];
+      // The cart's lines the form is on, as a one-variant pseudo product.
+      var on = function (h) { h = (h || "").toLowerCase(); return ((cfg.products || []).indexOf("*") >= 0 || (cfg.products || []).indexOf(h) >= 0) && (cfg.excludeProducts || []).indexOf(h) < 0; };
+      cart.lines = (cart.items || []).filter(function (it) { return on(it.handle); });
+      if (!cfg || !cfg.enabled || !cart.lines.length) return;
+      var sum = cart.lines.reduce(function (a, it) { return a + it.final_line_price; }, 0);
+      product = { title: cart.lines.length + " article(s)", options: [], featured_image: cart.lines[0].image, variants: [{ id: 0, title: "", options: [], price: sum, available: true, featured_image: { src: cart.lines[0].image } }] };
+    } else {
+      product = res[1];
+    }
     if (!cfg || !cfg.enabled || !product || !product.variants) return;
     T = cfg.texts || {};
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mount);
@@ -182,7 +194,16 @@
     hasOptions = !(product.variants.length === 1);
     injectCss();
     pixelsInit();
-    var form = document.querySelector('form[action*="/cart/add"]');
+    var form = cartMode
+      ? document.querySelector('[name="checkout"]')
+      : document.querySelector('form[action*="/cart/add"]');
+    if (cartMode) {
+      var cb = h("button", { type: "button", class: "odc-open", text: T.button, onclick: open });
+      if (form && form.parentNode) form.parentNode.insertBefore(cb, form.nextSibling);
+      else document.body.appendChild(h("div", { class: "odc-float" }, [cb]));
+      document.documentElement.classList.add("odc-on");
+      return;
+    }
     if (cfg.mode === "embedded") {
       startState();
       build(false);
@@ -196,6 +217,14 @@
       if (form && form.parentNode) form.parentNode.insertBefore(btn, form.nextSibling);
       else document.body.appendChild(h("div", { class: "odc-float" }, [btn]));
     }
+    // Page builders (PageFly, GemPages…): any element with data-odc-open opens the form.
+    document.addEventListener("click", function (e) {
+      var t = e.target && e.target.closest && e.target.closest("[data-odc-open]");
+      if (!t) return;
+      e.preventDefault();
+      if (cfg.mode === "embedded") els.card.scrollIntoView({ behavior: "smooth", block: "start" });
+      else open();
+    });
     if (cfg.stickyButton) {
       var sticky = h("div", { class: "odc-sticky" }, [h("button", { type: "button", class: "odc-open odc-sticky-btn", text: T.button, onclick: function () {
         if (cfg.mode === "embedded") els.card.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -213,7 +242,7 @@
     if (cfg.offer && cfg.offer.tiers.length) {
       cfg.offer.tiers.forEach(function (t, i) { if (t.preselected) tierIdx = i; });
     }
-    var qty = cfg.offer && cfg.offer.tiers.length ? cfg.offer.tiers[tierIdx].qty : 1;
+    var qty = cartMode ? 1 : cfg.offer && cfg.offer.tiers.length ? cfg.offer.tiers[tierIdx].qty : 1;
     var pieces = [];
     for (var i = 0; i < qty; i++) pieces.push(start.options.slice());
     state = { pieces: pieces, qty: qty, tierIdx: tierIdx, ticks: {}, click: null, clickShown: false, promo: "", promoOk: false, quote: null, sending: false, done: false };
@@ -303,6 +332,10 @@
         ]));
       });
       parts.push(h("div", { class: "odc-h2", text: T.offerTitle }), els.tiers);
+    } else if (cartMode) {
+      cart.lines.forEach(function (it) {
+        parts.push(h("div", { class: "odc-cline" }, [h("span", { text: it.quantity + " \u00d7 " + it.title }), h("span", { text: money(it.final_line_price) })]));
+      });
     } else {
       els.qty = h("span", { class: "odc-qtyv", text: "1" });
       parts.push(h("div", { class: "odc-field odc-qty" }, [
@@ -384,6 +417,7 @@
 
   // Items sent to the server: identical options are merged.
   function items() {
+    if (cartMode) return cart.lines.map(function (it) { return { variantId: String(it.variant_id), quantity: it.quantity }; });
     var perPiece = cfg.offer && state.qty > 1 && hasOptions;
     var map = {}, order = [];
     for (var i = 0; i < state.qty; i++) {
@@ -583,6 +617,7 @@
         }
         state.done = true;
         var its = items() || [];
+        if (cartMode) { try { fetch(root + "cart/clear.js", { method: "POST" }); } catch (e2) {} }
         track("purchase", {
           value: j.total, currency: j.currency || "MAD", ids: its.map(function (i) { return i.variantId; }),
           qty: state.qty, order: j.orderName, eventId: "odc_" + j.orderName,
@@ -685,6 +720,7 @@
       ".odc-badge{background:" + P + ";color:" + PT + ";font-size:11px;font-weight:700;padding:3px 8px;border-radius:20px;white-space:nowrap}" +
       ".odc-tick{display:flex;align-items:center;gap:10px;margin-top:10px;padding:12px;border:1.5px dashed #c9c9c9;border-radius:10px;font-size:14px;cursor:pointer}" +
       ".odc-tick span{flex:1}" +
+      ".odc-cline{display:flex;justify-content:space-between;gap:8px;margin-top:8px;font-size:14px}" +
       ".odc-promo{display:flex;gap:8px}.odc-promobtn{padding:0 16px;border:1px solid " + P + ";background:#fff;color:" + P + ";border-radius:9px;font:inherit;font-weight:600;cursor:pointer}" +
       ".odc-totals{margin-top:12px;padding:10px 12px;background:#f1f1f1;border-radius:8px;font-size:14px}" +
       ".odc-totals div{display:flex;justify-content:space-between;padding:3px 0}.odc-total{font-size:16px}.odc-disc{color:#0a7a3d}" +

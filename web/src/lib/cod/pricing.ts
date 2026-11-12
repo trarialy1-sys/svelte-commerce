@@ -8,7 +8,10 @@
  * ("QUANTITY DISCOUNT", "CUSTOM DISCOUNT", or the promo code).
  */
 
-import type { ClickUpsell, CodConfig, OfferTier, QuantityOffer, ShippingRate, TickUpsell } from "./config";
+import { formOnProduct, type ClickUpsell, type CodConfig, type OfferTier, type QuantityOffer, type ShippingRate, type TickUpsell } from "./config";
+
+/** Pseudo-handle for an order from the cart page (several products). */
+export const CART_HANDLE = "__cart__";
 
 export const QUANTITY_LABEL = "QUANTITY DISCOUNT";
 export const CUSTOM_LABEL = "CUSTOM DISCOUNT";
@@ -130,7 +133,8 @@ export function quoteCart(
   let mainQty = 0;
   for (const l of req.lines) {
     const v = variants.get(l.variantId);
-    if (!v || v.handle !== handle.toLowerCase()) return { ok: false, field: "items", message: "Ce produit n'est pas disponible." };
+    const okProduct = handle === CART_HANDLE ? Boolean(v && formOnProduct(config, v.handle)) : Boolean(v && v.handle === handle.toLowerCase());
+    if (!v || !okProduct) return { ok: false, field: "items", message: "Ce produit n'est pas disponible." };
     if (!v.available) return { ok: false, field: "items", message: `${v.title} est en rupture de stock.` };
     lines.push({ variantId: v.variantId, quantity: l.quantity, unitCents: v.priceCents, title: v.title, kind: "main" });
     for (let i = 0; i < l.quantity; i++) units.push(v.priceCents);

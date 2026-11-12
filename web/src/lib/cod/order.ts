@@ -12,7 +12,7 @@ import {
   type CodConfig,
 } from "./config";
 import { COD_ACTION, COD_GATEWAY, COD_TAG, amountToCents, centsToAmount, normalizePhone, type CodSubmission } from "./form";
-import { discountTitle, quoteCart, type PricedVariant, type PromoCode, type Quote } from "./pricing";
+import { CART_HANDLE, discountTitle, quoteCart, type PricedVariant, type PromoCode, type Quote } from "./pricing";
 import { getCodConfig } from "./store";
 
 /** Which org owns this shop (the storefront script only knows the shop). */
@@ -194,12 +194,14 @@ async function priceSubmission(
   s: CodSubmission
 ): Promise<{ gql: Gql; res: QuoteResponse }> {
   const { gql } = await getShopifyClient(orgId);
-  if (!s.handle || !formOnProduct(config, s.handle)) {
+  const cart = s.handle === CART_HANDLE;
+  if (!s.handle || (!cart && !formOnProduct(config, s.handle)) || (cart && !config.cartButton)) {
     return { gql, res: { ok: false, status: 400, field: "items", message: "Ce produit n'est pas disponible." } };
   }
-  const offer = offerForProduct(config, s.handle);
-  const ticks = tickUpsellsFor(config, s.handle);
-  const click = clickUpsellFor(config, s.handle);
+  // From the cart page: the products as they are (no per-product offer or upsell).
+  const offer = cart ? null : offerForProduct(config, s.handle);
+  const ticks = cart ? [] : tickUpsellsFor(config, s.handle);
+  const click = cart ? null : clickUpsellFor(config, s.handle);
   const ids = [
     ...new Set([...s.items.map((i) => i.variantId), ...ticks.map((t) => t.variantId), ...(click ? [click.variantId] : [])]),
   ];

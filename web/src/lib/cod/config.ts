@@ -105,6 +105,8 @@ export interface CodConfig {
   excludeProducts: string[];
   mode: "popup" | "embedded";
   stickyButton: boolean;
+  /** Button on the cart page: orders every product of the cart that the form is on. */
+  cartButton: boolean;
   hideAddToCart: boolean;
   hideBuyNow: boolean;
   hideSelectors: string; // CSS of other COD apps' buttons to hide where ours shows
@@ -181,6 +183,7 @@ export function defaultConfig(env: Record<string, string | undefined> = {}): Cod
     excludeProducts: [],
     mode: "popup",
     stickyButton: false,
+    cartButton: false,
     hideAddToCart: false,
     hideBuyNow: false,
     hideSelectors: DEFAULT_HIDE_SELECTORS,
@@ -290,6 +293,7 @@ export function sanitizeConfig(input: unknown, env: Record<string, string | unde
     excludeProducts: handles(c.excludeProducts),
     mode: c.mode === "embedded" ? "embedded" : "popup",
     stickyButton: bool(c.stickyButton, d.stickyButton),
+    cartButton: bool(c.cartButton, false),
     hideAddToCart: bool(c.hideAddToCart, false),
     hideBuyNow: bool(c.hideBuyNow, false),
     hideSelectors: c.hideSelectors === undefined ? d.hideSelectors : str(c.hideSelectors, 500).replace(/[{}<>]/g, ""),
@@ -425,8 +429,11 @@ export const clickUpsellFor = (c: CodConfig, handle: string): ClickUpsell | null
 
 /** What the storefront script receives for one product (no fraud lists). */
 export function publicConfig(c: CodConfig, handle: string) {
+  const cart = handle === "__cart__";
   return {
-    enabled: formOnProduct(c, handle),
+    enabled: cart ? c.enabled && c.cartButton : formOnProduct(c, handle),
+    products: cart ? c.products : undefined,
+    excludeProducts: cart ? c.excludeProducts : undefined,
     mode: c.mode,
     stickyButton: c.stickyButton,
     hideAddToCart: c.hideAddToCart,
@@ -444,9 +451,9 @@ export function publicConfig(c: CodConfig, handle: string) {
     pixelId: c.pixels.meta[0] ?? null,
     pixels: c.pixels,
     maxQty: c.fraud.maxQty,
-    offer: offerForProduct(c, handle),
-    tickUpsells: tickUpsellsFor(c, handle),
-    clickUpsell: clickUpsellFor(c, handle),
+    offer: cart ? null : offerForProduct(c, handle),
+    tickUpsells: cart ? [] : tickUpsellsFor(c, handle),
+    clickUpsell: cart ? null : clickUpsellFor(c, handle),
     shippingRates: c.shippingRates,
   };
 }
