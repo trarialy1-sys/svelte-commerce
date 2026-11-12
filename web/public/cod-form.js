@@ -774,7 +774,7 @@
       ".odc-has-sticky body{padding-bottom:76px}" +
       ".odc-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2147483000;display:flex;align-items:flex-end;justify-content:center;font-family:inherit}" +
       ".odc-uplayer{z-index:2147483001;align-items:center;padding:16px}" +
-      ".odc-modal{background:#fff;color:#111;width:100%;max-width:520px;max-height:94vh;overflow:auto;border-radius:max(var(--odc-r),6px) max(var(--odc-r),6px) 0 0;box-sizing:border-box;-webkit-overflow-scrolling:touch}" +
+      ".odc-modal{background:#fff;color:#111;width:100%;max-width:540px;max-height:94vh;overflow:auto;border-radius:max(var(--odc-r),6px) max(var(--odc-r),6px) 0 0;box-sizing:border-box;-webkit-overflow-scrolling:touch}" +
       ".odc-embed{margin-top:16px}.odc-embed .odc-modal{max-width:none;max-height:none;border:1px solid #e3e3e3;border-radius:" + R + "}" +
       "@media(min-width:640px){.odc-overlay{align-items:center}.odc-overlay .odc-modal{border-radius:var(--odc-r)}}" +
       ".odc-modal *,.odc-up *{box-sizing:border-box}" +
@@ -796,7 +796,7 @@
       ".odc-chips{display:flex;flex-wrap:wrap;gap:8px}" +
       ".odc-chip{min-width:44px;height:40px;padding:0 12px;border:1px solid #cbcbcb;background:#fff;border-radius:var(--odc-r);font:inherit;font-size:14px;cursor:pointer;color:#111}" +
       ".odc-chip.odc-sel{border-color:" + P + ";background:" + P + ";color:" + PT + "}.odc-chip.odc-out{opacity:.4;text-decoration:line-through}" +
-      ".odc-qty{display:flex;align-items:center;justify-content:space-between}.odc-qty label{margin:0}" +
+      ".odc-qty{display:flex;align-items:center;justify-content:space-between}.odc-qty label{margin:0;font-family:var(--odc-hf);font-weight:var(--odc-hw);letter-spacing:var(--odc-hls);text-transform:var(--odc-htt);font-size:14px}" +
       ".odc-stepper{display:flex;align-items:center;border:1px solid #cbcbcb;border-radius:var(--odc-r)}" +
       ".odc-stepper button{width:44px;height:40px;background:none;border:0;font-size:20px;cursor:pointer;color:#111}.odc-qtyv{min-width:28px;text-align:center;font-weight:600}" +
       ".odc-tiers{display:flex;flex-direction:column;gap:8px;margin-top:8px}" +
