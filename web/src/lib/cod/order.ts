@@ -67,6 +67,31 @@ export type CodResult =
   | { ok: true; orderName: string; orderId: string; totalCents: number; currency: string; duplicate?: boolean }
   | { ok: false; status: number; field?: string; message: string };
 
+const CUSTOMER_FIND = `
+query CodCustomer($q: String!) { customers(first: 1, query: $q) { nodes { id } } }`;
+const CUSTOMER_CREATE = `
+mutation CodCustomerCreate($input: CustomerInput!) {
+  customerCreate(input: $input) { customer { id } userErrors { field message } }
+}`;
+
+type Gql = <T>(query: string, variables?: Record<string, unknown>) => Promise<T>;
+
+/** Shopify only links an order to a customer by id/e-mail, so resolve the phone first. */
+async function findOrCreateCustomer(gql: Gql, phone: string, name: string): Promise<string | null> {
+  try {
+    const found = await gql<{ customers: { nodes: { id: string }[] } }>(CUSTOMER_FIND, {
+      q: `phone:"${phone}"`,
+    });
+    if (found.customers.nodes[0]) return found.customers.nodes[0].id;
+    const made = await gql<{ customerCreate: { customer: { id: string } | null } }>(CUSTOMER_CREATE, {
+      input: { phone, firstName: name, lastName: "-" },
+    });
+    return made.customerCreate.customer?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 const money = (cents: number, currency: string) => ({
   shopMoney: { amount: centsToAmount(cents), currencyCode: currency },
 });
@@ -179,18 +204,27 @@ export async function createCodOrder(
   const options = { inventoryBehaviour: "DECREMENT_OBEYING_POLICY", sendReceipt: false, sendFulfillmentReceipt: false };
   type Created = { orderCreate: { order: { id: string; name: string } | null; userErrors: { field: string[] | null; message: string }[] } };
 
-  // With the customer attached first; if Shopify refuses the phone/customer
-  // (duplicate, format), still take the order — the address carries the phone.
-  let r = await gql<Created>(ORDER_CREATE, {
-    order: { ...base, phone: s.phone, customer: { toUpsert: { phone: s.phone, firstName: s.name } } },
-    options,
-  });
-  let errs = r.orderCreate.userErrors;
-  if (!r.orderCreate.order && errs.some((e) => /phone|customer/i.test(`${e.field?.join(".")} ${e.message}`))) {
-    r = await gql<Created>(ORDER_CREATE, { order: base, options });
-    errs = r.orderCreate.userErrors;
+  // Attach the customer when we can; never lose the order over it — the
+  // shipping address always carries the name and phone.
+  const customerId = await findOrCreateCustomer(gql, s.phone, s.name);
+  const attempt = async (order: Record<string, unknown>): Promise<Created | null> => {
+    try {
+      return await gql<Created>(ORDER_CREATE, { order, options });
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : String(e);
+      return null;
+    }
+  };
+  let lastError = "";
+  let r: Created | null = customerId
+    ? await attempt({ ...base, phone: s.phone, customer: { toAssociate: { id: customerId } } })
+    : null;
+  if (!r?.orderCreate.order) {
+    if (r) lastError = r.orderCreate.userErrors.map((e) => e.message).join("; ");
+    r = await attempt(base);
   }
-  const order = r.orderCreate.order;
+  const errs = r?.orderCreate.userErrors ?? [{ field: null, message: lastError }];
+  const order = r?.orderCreate.order ?? null;
   if (!order) {
     const message = errs.map((e) => e.message).join("; ").slice(0, 300) || "orderCreate returned nothing";
     await odb.auditLog.create({
