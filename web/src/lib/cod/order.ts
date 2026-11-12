@@ -168,7 +168,7 @@ export async function createCodOrder(
     }
     const unit = amountToCents(v.price);
     totalCents += unit * item.quantity;
-    lineItems.push({ variantId: v.id, quantity: item.quantity, priceSet: money(unit, currency) });
+    lineItems.push({ variantId: v.id, quantity: item.quantity, priceSet: money(unit, currency), requiresShipping: true });
   }
 
   const address = {
