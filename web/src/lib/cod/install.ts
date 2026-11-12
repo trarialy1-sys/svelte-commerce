@@ -54,7 +54,7 @@ export async function codOverview(orgId: string): Promise<CodOverview> {
   const ordered = new Set(orders.map((o) => (o.meta as { leadId?: string } | null)?.leadId));
   return {
     installed,
-    products: codEnabledProducts(),
+    products: await codEnabledProducts(orgId),
     orders7d: orders.length,
     abandoned7d: leads.filter((l) => !ordered.has(l.entityId ?? "")).length,
   };

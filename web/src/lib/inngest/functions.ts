@@ -17,6 +17,8 @@ import { importShopifyOrders } from "@/lib/orders/import-shopify";
 import { getCredentials } from "@/lib/integrations/vault";
 import { sendOrgDigest } from "@/lib/digest/send";
 import { captureJobError } from "@/lib/observability/jobs";
+import { exportOrderToSheet } from "@/lib/sheets/export";
+import { purchaseEvent, purchaseEventId, sendCapiEvent } from "@/lib/meta/capi";
 import { inngest, type AppEvents } from "./client";
 
 /** Active org ids (global table — system context, no per-org scope needed). */
@@ -313,6 +315,59 @@ const backfillFulfil = inngest.createFunction(
   }
 );
 
+// ── Google Sheets order export ────────────────────────────────────────────────
+// One event per new form order. One at a time per org so rows land in order;
+// retried on Google / Shopify errors; idempotent (an order is written once).
+const sheetsExportOrder = inngest.createFunction(
+  {
+    id: "sheets-export-order",
+    concurrency: { limit: 1, key: "event.data.orgId" },
+    retries: 6,
+    triggers: [{ event: "sheets/order.export" }],
+  },
+  async ({ event, step }) => {
+    const { orgId, orderId } = event.data as AppEvents["sheets/order.export"];
+    try {
+      return await step.run("append-row", () => exportOrderToSheet(orgId, orderId));
+    } catch (err) {
+      await captureJobError("sheets-export-order", err, orgId);
+      throw err;
+    }
+  }
+);
+
+// ── Meta Conversions API ──────────────────────────────────────────────────────
+// Server-side Purchase for each form order, deduplicated with the browser pixel
+// by event id. Meta also dedups a retried event with the same id.
+const metaPurchase = inngest.createFunction(
+  {
+    id: "meta-purchase-send",
+    retries: 5,
+    triggers: [{ event: "meta/purchase.send" }],
+  },
+  async ({ event, step }) => {
+    const { orgId, ...input } = event.data as AppEvents["meta/purchase.send"];
+    try {
+      const r = await step.run("send", () => sendCapiEvent(purchaseEvent(input)));
+      await step.run("log", () =>
+        getOrgDb(orgId).auditLog.create({
+          data: {
+            orgId,
+            action: "meta.capi_purchase",
+            entity: "Order",
+            entityId: input.orderId,
+            meta: { eventId: purchaseEventId(input.orderName), received: r.received, traceId: r.traceId },
+          },
+        })
+      );
+      return r;
+    } catch (err) {
+      await captureJobError("meta-purchase-send", err, orgId);
+      throw err;
+    }
+  }
+);
+
 export const functions = [
   parcelSyncSchedule,
   parcelSyncOrg,
@@ -323,4 +378,6 @@ export const functions = [
   digestSchedule,
   digestSendOrg,
   backfillFulfil,
+  sheetsExportOrder,
+  metaPurchase,
 ];

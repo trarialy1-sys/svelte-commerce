@@ -11,6 +11,9 @@ import { BackfillCard } from "./backfill-card";
 import { CodCard } from "./cod-card";
 import { codOverview } from "@/lib/cod/install";
 import { IntegrationsClient } from "./integrations-client";
+import { SheetsCard } from "./sheets-card";
+import { googleConfigured } from "@/lib/integrations/google/oauth";
+import { sheetsOverview } from "@/lib/sheets/export";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +47,7 @@ export default async function IntegrationsPage() {
     : null;
 
   const cod = showBackfill ? await codOverview(orgId!).catch(() => null) : null;
+  const sheets = appRole === "owner" && orgId ? await sheetsOverview(orgId).catch(() => null) : null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -53,6 +57,7 @@ export default async function IntegrationsPage() {
         shopifyRedirectUri={shopifyRedirectUri()}
       />
       {cod ? <CodCard initial={cod} /> : null}
+      {sheets ? <SheetsCard initial={sheets} configured={googleConfigured()} /> : null}
       {backfill ? <BackfillCard initial={backfill} /> : null}
     </div>
   );
