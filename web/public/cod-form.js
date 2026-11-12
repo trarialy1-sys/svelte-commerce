@@ -260,7 +260,10 @@
     } catch (e) {}
     var v = variantFor(state.pieces[0]) || firstAvailable();
     track("checkout", { value: v.price / 100, currency: "MAD", ids: [String(v.id)], qty: state.qty });
-    setTimeout(function () { var f = els.fields[0]; if (f) f.input.focus(); }, 50);
+    // Desktop only: on phones the keyboard would cover the offers.
+    if (window.matchMedia && window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+      setTimeout(function () { var f = els.fields[0]; if (f) f.input.focus(); }, 50);
+    }
   }
 
   function close() {
@@ -467,7 +470,10 @@
         b.classList.toggle("odc-tsel", i === state.tierIdx);
         b.setAttribute("aria-checked", i === state.tierIdx ? "true" : "false");
         var t = cfg.offer.tiers[i], unit = v ? v.price : 0;
-        b.querySelector(".odc-tprice").textContent = money(tierTotal(t, unit));
+        var tp = b.querySelector(".odc-tprice"), full = unit * t.qty, now = tierTotal(t, unit);
+        tp.innerHTML = "";
+        if (now < full) tp.appendChild(h("s", { class: "odc-upold", text: money(full) }));
+        tp.appendChild(document.createTextNode(money(now)));
       });
     }
     if (els.qty) els.qty.textContent = String(state.qty);
@@ -752,7 +758,8 @@
       ".odc-uptext{font-size:14px;color:#444;margin:6px 0}.odc-upprice{font-size:22px;font-weight:700;margin:10px 0}" +
       ".odc-decline{display:block;width:100%;margin-top:10px;background:none;border:0;color:#666;text-decoration:underline;font:inherit;font-size:14px;cursor:pointer}" +
       ".odc-note{margin-top:10px;font-size:12px;color:#666;text-align:center}.odc-thanks p{margin:6px 0;font-size:14px}" +
-      "[dir=rtl] .odc-tier,[dir=rtl] .odc-field label{text-align:right}";
+      "[dir=rtl] .odc-tier,[dir=rtl] .odc-field label{text-align:right}" +
+      "[dir=rtl] .odc-tprice,[dir=rtl] .odc-price,[dir=rtl] .odc-totals span,[dir=rtl] .odc-totals strong,[dir=rtl] .odc-tick strong,[dir=rtl] .odc-upprice,[dir=rtl] .odc-cline span{direction:ltr;unicode-bidi:isolate}";
     document.head.appendChild(h("style", { text: css }));
   }
 })();
