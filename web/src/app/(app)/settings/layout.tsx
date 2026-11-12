@@ -9,6 +9,7 @@ const TABS: Array<
   { href: "/settings/organization", label: "Organisation" },
   { href: "/settings/team", label: "Équipe" },
   { href: "/settings/integrations", label: "Intégrations", ownerOnly: true },
+  { href: "/settings/cod-form", label: "Formulaire COD", ownerOnly: true },
   { href: "/settings/security", label: "Sécurité & audit", minRole: "admin" },
 ];
 

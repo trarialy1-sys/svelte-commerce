@@ -1,7 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { allowedOrigins, isProductEnabled, validateSubmission } from "@/lib/cod/form";
-import { codEnabledProducts, createCodOrder, resolveOrgByShop, saveLead } from "@/lib/cod/order";
+import { publicConfig } from "@/lib/cod/config";
+import { allowedOrigins, validateSubmission } from "@/lib/cod/form";
+import { createCodOrder, quoteSubmission, resolveOrgByShop, saveLead } from "@/lib/cod/order";
+import { centsToAmount } from "@/lib/cod/form";
+import { getCodConfig } from "@/lib/cod/store";
 import { inngest, type AppEvents } from "@/lib/inngest/client";
 import { buildPurchaseInput, capiConfigured } from "@/lib/meta/capi";
 import { logError } from "@/lib/observability/logger";
@@ -39,16 +42,16 @@ export function OPTIONS(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   const shop = req.nextUrl.searchParams.get("shop") ?? "";
-  const handle = req.nextUrl.searchParams.get("handle") ?? "";
-  const enabled = handle !== "" && isProductEnabled(codEnabledProducts(), handle);
-  return NextResponse.json(
-    {
-      enabled,
-      pixelId: process.env.COD_FORM_PIXEL_ID ?? null,
-      thankYouUrl: process.env.COD_FORM_THANKYOU_URL ?? null,
-    },
-    { headers: cors(req, shop) }
-  );
+  const handle = (req.nextUrl.searchParams.get("handle") ?? "").toLowerCase();
+  const headers = cors(req, shop);
+  try {
+    const orgId = handle ? await resolveOrgByShop(shop) : null;
+    if (!orgId) return NextResponse.json({ enabled: false }, { headers });
+    return NextResponse.json(publicConfig(await getCodConfig(orgId), handle), { headers });
+  } catch (e) {
+    logError("COD form config failed", e, { route: "public/cod" });
+    return NextResponse.json({ enabled: false }, { headers });
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -74,19 +77,52 @@ export async function POST(req: NextRequest) {
     if (!body.address) body.address = "---";
     if (!body.name) body.name = "--";
   }
-  const v = validateSubmission(body);
-  if (!v.ok) {
-    return NextResponse.json({ ok: false, field: v.field, message: v.message }, { status: 400, headers });
+  if (body.action === "quote") {
+    // The summary needs no contact details yet.
+    body.name ||= "--";
+    body.phone ||= "0600000000";
+    body.city ||= "";
+    body.address ||= "---";
+    body.leadId ||= "quote0000";
   }
   try {
     const orgId = await resolveOrgByShop(shop);
     if (!orgId) {
       return NextResponse.json({ ok: false, message: "Boutique inconnue." }, { status: 404, headers });
     }
+    const config = await getCodConfig(orgId);
+    const v = validateSubmission(body, {
+      required: body.action === "order" ? config.fields.filter((f) => f.show && f.required).map((f) => f.key) : [],
+      maxQty: config.fraud.maxQty,
+    });
+    if (!v.ok) {
+      return NextResponse.json({ ok: false, field: v.field, message: v.message }, { status: 400, headers });
+    }
     const ip = clientIp(req);
     if (body.action === "lead") {
       await saveLead(orgId, v.value, ip);
       return NextResponse.json({ ok: true }, { headers });
+    }
+    if (body.action === "quote") {
+      const q = await quoteSubmission(orgId, v.value);
+      if (!q.ok) return NextResponse.json({ ok: false, field: q.field, message: q.message }, { status: q.status, headers });
+      const qt = q.quote;
+      return NextResponse.json(
+        {
+          ok: true,
+          currency: q.currency,
+          subtotal: Number(centsToAmount(qt.subtotalCents)),
+          discounts: qt.discounts.map((d) => ({ label: d.label, amount: Number(centsToAmount(d.cents)) })),
+          discount: Number(centsToAmount(qt.discountCents)),
+          shipping: { title: qt.shipping.title, amount: Number(centsToAmount(qt.shipping.cents)) },
+          total: Number(centsToAmount(qt.totalCents)),
+          tier: qt.tier?.label ?? null,
+        },
+        { headers }
+      );
+    }
+    if (body.action !== "order") {
+      return NextResponse.json({ ok: false, message: "Requête invalide." }, { status: 400, headers });
     }
     const r = await createCodOrder(orgId, v.value, ip);
     if (!r.ok) {

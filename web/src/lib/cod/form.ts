@@ -11,9 +11,10 @@ export const COD_ACTION = {
   LEAD: "cod.lead",
   ORDER: "cod.order_created",
   FAILED: "cod.order_failed",
+  BLOCKED: "cod.order_blocked",
 } as const;
 
-export const MAX_LINES = 5;
+export const MAX_LINES = 10;
 export const MAX_QTY = 10;
 
 export interface CodItem {
@@ -31,6 +32,19 @@ export interface CodSubmission {
   items: CodItem[];
   utm: Record<string, string>;
   pageUrl: string | null;
+  handle: string;
+  address2: string;
+  email: string;
+  note: string;
+  tickIds: string[];
+  click: { id: string; kind: "upsell" | "downsell" } | null;
+  discountCode: string;
+}
+
+export interface ValidateOptions {
+  /** Fields the merchant made required (name + phone always are). */
+  required?: string[];
+  maxQty?: number;
 }
 
 export type Validation =
@@ -69,8 +83,10 @@ export function isProductEnabled(enabled: string[], handle: string): boolean {
   return enabled.includes("*") || enabled.includes(handle.toLowerCase());
 }
 
-export function validateSubmission(body: unknown): Validation {
+export function validateSubmission(body: unknown, opts: ValidateOptions = {}): Validation {
   const b = (body ?? {}) as Record<string, unknown>;
+  const req = new Set(opts.required ?? ["city", "address"]);
+  const maxQty = opts.maxQty ?? MAX_QTY;
   const leadId = clean(b.leadId, 64);
   if (!/^[A-Za-z0-9_-]{8,64}$/.test(leadId)) {
     return { ok: false, field: "leadId", message: "Requête invalide." };
@@ -82,11 +98,21 @@ export function validateSubmission(body: unknown): Validation {
     return { ok: false, field: "phone", message: "Insérez un numéro de téléphone valide." };
   }
   const city = clean(b.city, 80);
-  if (city.length < 2) return { ok: false, field: "city", message: "Indiquez votre ville." };
+  if (req.has("city") && city.length < 2) return { ok: false, field: "city", message: "Indiquez votre ville." };
   const address = clean(b.address, 200);
-  if (address.length < 3) {
+  if (req.has("address") && address.length < 3) {
     return { ok: false, field: "address", message: "Indiquez votre adresse." };
   }
+  const address2 = clean(b.address2, 200);
+  if (req.has("address2") && address2.length < 1) {
+    return { ok: false, field: "address2", message: "Champ obligatoire." };
+  }
+  const email = clean(b.email, 120).toLowerCase();
+  if ((req.has("email") || email) && !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/.test(email)) {
+    return { ok: false, field: "email", message: "Adresse e-mail invalide." };
+  }
+  const note = clean(b.note, 300);
+  if (req.has("note") && note.length < 1) return { ok: false, field: "note", message: "Champ obligatoire." };
   const rawItems = Array.isArray(b.items) ? b.items : [];
   const merged = new Map<string, number>();
   for (const it of rawItems.slice(0, 20)) {
@@ -102,12 +128,21 @@ export function validateSubmission(body: unknown): Validation {
     return { ok: false, field: "items", message: "Panier invalide." };
   }
   const items: CodItem[] = [];
+  let total = 0;
   for (const [variantId, quantity] of merged) {
-    if (quantity > MAX_QTY) {
-      return { ok: false, field: "items", message: `Quantité maximale : ${MAX_QTY}.` };
-    }
+    total += quantity;
     items.push({ variantId, quantity });
   }
+  if (total > maxQty) {
+    return { ok: false, field: "items", message: `Quantité maximale : ${maxQty}.` };
+  }
+  const ids = (v: unknown) =>
+    (Array.isArray(v) ? v : []).map((x) => clean(x, 40)).filter((x) => /^[A-Za-z0-9_-]{1,40}$/.test(x)).slice(0, 10);
+  const c = (b.click ?? null) as Record<string, unknown> | null;
+  const click =
+    c && /^[A-Za-z0-9_-]{1,40}$/.test(clean(c.id, 40)) && (c.kind === "upsell" || c.kind === "downsell")
+      ? { id: clean(c.id, 40), kind: c.kind as "upsell" | "downsell" }
+      : null;
   const utm: Record<string, string> = {};
   const u = (b.utm ?? {}) as Record<string, unknown>;
   for (const k of ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "fbclid"]) {
@@ -127,6 +162,13 @@ export function validateSubmission(body: unknown): Validation {
       items,
       utm,
       pageUrl: /^https:\/\//.test(pageUrl) ? pageUrl : null,
+      handle: clean(b.handle, 255).toLowerCase(),
+      address2,
+      email,
+      note,
+      tickIds: [...new Set(ids(b.tickIds))],
+      click,
+      discountCode: clean(b.discountCode, 40).toUpperCase(),
     },
   };
 }

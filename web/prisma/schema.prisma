@@ -24,6 +24,7 @@ enum IntegrationProvider {
   OZON
   ANTHROPIC
   GOOGLE_SHEETS
+  COD_FORM
 }
 
 enum OrderStatus {
