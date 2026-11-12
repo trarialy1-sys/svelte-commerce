@@ -23,9 +23,11 @@ beforeAll(async () => {
   });
   // One customer per org via the org-scoped client (orgId auto-injected).
   await getOrgDb(ORG_A).customer.create({
+    // @ts-expect-error orgId is left out on purpose: getOrgDb must inject it.
     data: { name: "Alice", phone: "+212600000001" },
   });
   await getOrgDb(ORG_B).customer.create({
+    // @ts-expect-error orgId is left out on purpose: getOrgDb must inject it.
     data: { name: "Bob", phone: "+212600000002" },
   });
 });

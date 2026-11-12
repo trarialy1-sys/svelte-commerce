@@ -29,10 +29,11 @@ async function cleanup() {
 async function seedOrg(org: string, tag: string) {
   const odb = getOrgDb(org);
   const customer = await odb.customer.create({
-    data: { name: `Cust ${tag}`, phone: `+21260000000${tag === "A" ? 1 : 2}` },
+    data: { orgId: org, name: `Cust ${tag}`, phone: `+21260000000${tag === "A" ? 1 : 2}` },
   });
   const order = await odb.order.create({
     data: {
+      orgId: org,
       code: `CMD-${tag}-1`,
       customerId: customer.id,
       totalPrice: tag === "A" ? 100 : 200,
@@ -40,10 +41,10 @@ async function seedOrg(org: string, tag: string) {
     },
   });
   await odb.parcel.create({
-    data: { orderId: order.id, codPrice: tag === "A" ? 100 : 200, tracking: `TRK-${tag}` },
+    data: { orgId: org, orderId: order.id, codPrice: tag === "A" ? 100 : 200, tracking: `TRK-${tag}` },
   });
   await odb.remittance.create({
-    data: { amount: tag === "A" ? 100 : 200, date: new Date("2026-06-01") },
+    data: { orgId: org, amount: tag === "A" ? 100 : 200, date: new Date("2026-06-01") },
   });
 }
 

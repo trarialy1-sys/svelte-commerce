@@ -32,6 +32,7 @@ async function newOrder(): Promise<string> {
   });
   const order = await odb.order.create({
     data: {
+      orgId: ORG,
       code: `OZ-${seq}`,
       cityId: 101, // resolved numeric Ozon city id (required to send)
       phone: `06120000${String(seq).padStart(2, "0")}`,
@@ -118,7 +119,7 @@ describe("createParcelForOrder (mocked Ozon)", () => {
 
   it("refuses to send when the city is unresolved (cityId null)", async () => {
     const order = await getOrgDb(ORG).order.create({
-      data: { code: "OZ-NOCITY", phone: "0612345678", totalPrice: 50 },
+      data: { orgId: ORG, code: "OZ-NOCITY", phone: "0612345678", totalPrice: 50 },
     });
     // fetch must never be called — stub it to throw if it is.
     vi.stubGlobal(
